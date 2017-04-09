@@ -40,6 +40,8 @@ def createGrid(event):
 			y = 0
 			x += 1
 
+		#add padding function here
+		
 		print "map loaded"
 		hasMap = True
 
