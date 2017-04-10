@@ -10,7 +10,7 @@ from tf.transformations import euler_from_quaternion
 from Node import Node
 import time
 
-
+#creates a background grid of Nodes for us to access based upon the map OccupancyCells
 def createGrid(event):
 	global grid 
 	global cell_size
