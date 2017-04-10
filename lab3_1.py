@@ -17,6 +17,8 @@ def createGrid(event):
 	global hasMap
 	global rows, cols
 	global offset
+	global obstacle_cell_list
+	global pad_cell_list
 
 	if(not hasMap):
 		x = 0 
@@ -36,12 +38,36 @@ def createGrid(event):
 				#asign a node to each grid item of node (x, y, wallchance)
 				grid[x][y] = Node(x, y, event.data[x+(y*cols)])
 				#print "{} {}".format(x,y)
+				if(grid[x][y].obstacle == True):
+					obstacle_cell_list.append(grid[x][y])
 				y += 1
 			y = 0
 			x += 1
 
-		#add padding function here
+		i = 0
+		j = 0
+
+		while (i < cols):
+			while (j < rows):
+				#check to see if cell is obstacle
+				print "obstacle check"
+				if(grid[i][j].obstacle == True):
+					print "obstacle true"
+					#if cell is obstacle, pad cells around it 
+					#if they are not obstacles too
+					if((i+1<rows) and (grid[i+1][j].obstacle == False)):
+						publishPadCell(i+1,j)
+					if((j+1<cols) and (grid[i][j+1].obstacle == False)):
+						publishPadCell(i,j+1)
+					if(grid[i][j-1].obstacle == False):
+						publishPadCell(i,j-1)
+					if(grid[i-1][j].obstacle == False):
+						publishPadCell(i-1,j)
+				j += 1
+			j = 0
+			i += 1
 		
+
 		print "map loaded"
 		hasMap = True
 
@@ -275,6 +301,31 @@ def publishVisitedCell(x, y):
 	msg.cells = visited_cell_list
 	visited_pub.publish(msg)
 
+def publishPadCell(x, y):
+	global pad_pub
+	global padding_cell_list
+	global cell_size
+	global offset
+
+	msg = GridCells()
+
+	grid_height = cell_size
+	grid_width = cell_size
+
+	header = Header()
+	header.frame_id = "map"
+
+	msg.header = header
+	msg.cell_width = grid_width
+	msg.cell_height = grid_height
+
+	point = Point()
+	point.x = (x * cell_size) + offset + (cell_size/2)
+	point.y = (y * cell_size) + (cell_size/2)
+
+	padding_cell_list.append(point)
+	msg.cells = padding_cell_list
+	pad_pub.publish(msg)
 
 def publishBlockedCell(x, y):
 	global block_pub
@@ -361,13 +412,16 @@ if __name__ == '__main__':
 
 	rospy.init_node('rpcole_lab3_node')
 
-	global visited_pub, block_pub, frontier_pub, unknown_pub, path_pub
+	global visited_pub, block_pub, frontier_pub, unknown_pub, path_pub, pad_pub
 	global pose 
 	global odom_tf
 	global frontier_cell_list
 	global path_cell_list
 	global visited_cell_list
-	global blocked_cell_list
+	global blocked_cell_list #for storing points
+	global pad_cell_list #for storing nodes
+	global obstacle_cell_list #for storing nodes
+	global padding_cell_list #for storing points
 	global goal
 	global start
 	global complete
@@ -378,11 +432,15 @@ if __name__ == '__main__':
 	global hasStart
 	global hasGoal
 
+
 	#initialize variables
 	visited_cell_list = []
 	path_cell_list = []
 	frontier_cell_list = []
 	blocked_cell_list = []
+	pad_cell_list = []
+	obstacle_cell_list = []
+	padding_cell_list = []
 	pose = PoseStamped()
 	start = Node(0,0,50)
 	goal = Node(0,0,50)
@@ -400,6 +458,7 @@ if __name__ == '__main__':
 	block_pub = rospy.Publisher('/blocked', GridCells, queue_size = 10)
 	frontier_pub = rospy.Publisher('/frontier', GridCells, queue_size = 10)
 	path_pub = rospy.Publisher('/path', GridCells, queue_size = 10)
+	pad_pub = rospy.Publisher('/padding', GridCells, queue_size = 10)
 	map_sub = rospy.Subscriber('/map', OccupancyGrid, createGrid)
 	goal_sub = rospy.Subscriber('/clicked_point', PointStamped, updateGoal)
 	start_sub = rospy.Subscriber('/initialpose', PoseWithCovarianceStamped, updateStart)
