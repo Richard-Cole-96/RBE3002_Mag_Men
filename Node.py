@@ -10,6 +10,7 @@ class Node:
 		self.hCost = 0
 		self.fCost = 0
 		self.parent = None
+		self.padding = False
 		if (wallChance < 50):
 			self.obstacle = False
 		elif(wallChance > 50):

@@ -9,6 +9,7 @@ from geometry_msgs.msg import PoseStamped, Pose, Point, PointStamped, PoseWithCo
 from tf.transformations import euler_from_quaternion
 from Node import Node
 import time
+from rpcole_lab2.msg import Waypoint
 
 #creates a background grid of Nodes for us to access based upon the map OccupancyCells
 def createGrid(event):
@@ -56,13 +57,21 @@ def createGrid(event):
 					#if cell is obstacle, pad cells around it 
 					#if they are not obstacles too
 					if((i+1<rows) and (grid[i+1][j].obstacle == False)):
+						print "true true"
 						publishPadCell(i+1,j)
+						grid[i+1][j].padding = True
 					if((j+1<cols) and (grid[i][j+1].obstacle == False)):
+						print "true true"
 						publishPadCell(i,j+1)
+						grid[i][j+1].padding = True
 					if(grid[i][j-1].obstacle == False):
+						print "true true"
 						publishPadCell(i,j-1)
+						grid[i][j-1].padding = True
 					if(grid[i-1][j].obstacle == False):
+						print "true true"
 						publishPadCell(i-1,j)
+						grid[i-1][j].padding = True
 				j += 1
 			j = 0
 			i += 1
@@ -172,6 +181,9 @@ def AStar(initial, end):
 			elif(children[k].obstacle):
 				#print "children remove obstacle {}, {}".format(children[k].x,children[k].y)
 				children.remove(children[k])
+			elif(children[k].padding):
+				#print "children remove padding {}, {}".format(children[k].x,children[k].y)
+				children.remove(children[k])
 			else:
 				pass
 				#print "good children {}, {}".format(children[k].x,children[k].y)
@@ -251,28 +263,54 @@ def publishPath(steps):
 	print ""
 
 def wayPoints(steps):
+	global tolerance
+
 	ways = []
+	waypoint = []
+
 	i = len(steps) -1
 	ways.append(steps[i])
+	point = Point()
+	point.x = steps[i].x
+	point.y = steps[i].y
+	waypoint.append(point)
+	#start from the end
 	while (i > 0):
 		if((steps[i].x == steps[i-1].x) and not (steps[i].y == steps[i-1].y)):
 			if(not (steps[i-1].x == steps[i-2].x) and (steps[i-1].y == steps[i-2].y)):
 				ways.append(steps[i-1])
+				point = Point()
+				point.x = steps[i-1].x
+				point.y = steps[i-1].y
+				waypoint.append(point)
 		elif(not (steps[i].x == steps[i-1].x) and (steps[i].y == steps[i-1].y)):
 			if((steps[i-1].x == steps[i-2].x) and not (steps[i-1].y == steps[i-2].y)):
 				ways.append(steps[i-1])
+				point = Point()
+				point.x = steps[i-1].x
+				point.y = steps[i-1].y
+				waypoint.append(point)
 
 		i -= 1
 	ways.append(steps[0])
+	point = Point()
+	point.x = steps[0].x
+	point.y = steps[0].y
+	waypoint.append(point)
 
 	print "Waypoints  :  "
 
 	i = len(ways) - 1
-	while (i >= 0):  
+	while (i >= 0):
 		print "[{},{}]".format(ways[i].x,ways[i].y)
 		publishPathCell(ways[i].x, ways[i].y)
 		i -= 1
 		print ""
+
+
+	msg = Waypoint()
+	msg.waypoints = waypoint
+	waypoint_pub.publish(msg)
 
 def publishVisitedCell(x, y):
 	global visited_pub
@@ -410,7 +448,7 @@ def publishPathCell(x, y):
 
 if __name__ == '__main__':
 
-	rospy.init_node('rpcole_lab3_node')
+	rospy.init_node('Mag_Men_Astar')
 
 	global visited_pub, block_pub, frontier_pub, unknown_pub, path_pub, pad_pub
 	global pose 
@@ -431,6 +469,7 @@ if __name__ == '__main__':
 	global offset
 	global hasStart
 	global hasGoal
+	global tolerance #used for comparing floats
 
 
 	#initialize variables
@@ -452,18 +491,23 @@ if __name__ == '__main__':
 	rows = 0
 	cols = 0
 	offset = .5
+	tolerance = .01 #used for comparing floats
 
-	#initialize publishers and subscribers
+	#initialize publishers
+	pad_pub = rospy.Publisher('/padding', GridCells, queue_size = 25)
 	visited_pub = rospy.Publisher('/visited', GridCells, queue_size = 10)
 	block_pub = rospy.Publisher('/blocked', GridCells, queue_size = 10)
 	frontier_pub = rospy.Publisher('/frontier', GridCells, queue_size = 10)
 	path_pub = rospy.Publisher('/path', GridCells, queue_size = 10)
-	pad_pub = rospy.Publisher('/padding', GridCells, queue_size = 10)
+	waypoint_pub = rospy.Publisher('/waypoints', Waypoint, queue_size = 1)
+
+	#initialize subscribers
 	map_sub = rospy.Subscriber('/map', OccupancyGrid, createGrid)
 	goal_sub = rospy.Subscriber('/clicked_point', PointStamped, updateGoal)
 	start_sub = rospy.Subscriber('/initialpose', PoseWithCovarianceStamped, updateStart)
+
 	
-	
+	print "Lab 3 Started"
 
 	while(1 and not rospy.is_shutdown()):
 

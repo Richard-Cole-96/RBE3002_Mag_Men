@@ -7,7 +7,7 @@ from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import PoseStamped, Pose
 from tf.transformations import euler_from_quaternion
-# Add additional imports for each of the message types used
+from rpcole_lab2.msg import Waypoint
 
 
 #drive to a goal subscribed as /move_base_simple/goal
@@ -23,14 +23,14 @@ def navToPose(goal):
     #rotate back to home
     rotate(90)
     print "done"
-	
 
 
 #This function sequentially calls methods to perform a trajectory.
 def executeTrajectory():
-    #trajector methods
-
-    pass  # Delete this 'pass' once implemented
+    driveStraight(.25,.6)
+    rotate(90)
+    driveStraight(.25,.45)
+    rotate(-135)
 
 wheelSpacing=9.0
 
@@ -52,8 +52,6 @@ def spinWheels(u1, u2, time):
     while(rospy.Time.now().secs - now  <= time and not rospy.is_shutdown()):
         Twist_pub.publish(twist_msg)
     Twist_pub.publish(stop_msg)
-      # Delete this 'pass' once implemented
-
 
 
 #This function accepts a speed and a distance for the robot to move in a straight line
@@ -61,15 +59,15 @@ def driveStraight(speed, distance):
     #power both wheels
     #if distance, measured by encoders, reached - stop
     global pose
-    initialx = pose.position.x
-    initialy = pose.position.y
+    initialx = pose.pose.position.x
+    initialy = pose.pose.position.y
     atTarget = False
 
-    print "RUNNING RUNNIGN RUNNING"
+    #print "RUNNING RUNNIGN RUNNING"
 
     while (not atTarget and not rospy.is_shutdown()):
-        currentX = pose.position.x
-        currentY = pose.position.y
+        currentX = pose.pose.position.x
+        currentY = pose.pose.position.y
         #print "loop"
         #print currentX
         #print speed
@@ -80,7 +78,7 @@ def driveStraight(speed, distance):
 
 	publishTwist(0,0)           
       
-    print "ok next"
+    #print "ok next"
 
     
 #Accepts an angle and makes the robot rotate around it.
@@ -93,57 +91,105 @@ def rotate(angle):
     global theta
     global originTheta
 
-    originTheta = 0
+    vel = 0
 
-    if (angle > 180 or  angle <- 180):
-        print "angle too large or small"
-    vel = Twist();
-    done = True
+    #set starting angle for referance later
+    originTheta = theta
 
-    originTheta = originTheta + theta
+    if(angle > 180):
+        print "angle is too large"
+        excess = angle - 180
+        angle = -180 + excess
+    if(angle < -180):
+        print "angle is too small"
+        excess = angle + 180
+        angle = -180 + excess
 
-    #set rotation direction
-    angle = angle + originTheta
     error = angle-theta
 
     ##determine which way to turn based on angle
 
     while((abs(error) >= 2) and not rospy.is_shutdown()):
         
-         if (angle > originTheta):
-            vel.angular.z = 0.5
-         elif (angle < originTheta):
-            vel.angular.z = -0.5
-     
-     	 error = angle-theta
-         Twist_pub.publish(vel)
+        if (angle > originTheta):
+            vel = 0.35
+        elif (angle < originTheta):
+            vel = -0.35
+        #recalc error and publish twist to move turtlebot
+     	publishTwist(0.0,vel)
+        error = angle-theta
 
-    vel.angular.z = 0
-    Twist_pub.publish(vel)
+    #rotation complete so stop movement
+    vel = 0
+    publishTwist(0.0,vel)
 
-    # Delete this 'pass' once implemented
 
+#navigates to a pose
 def navToPose(goal):
-	pass
+    global yPosition
+    global theta
+    global xPosition
+    global pose
+
+    #calc initial position for referance later
+    iX = xPosition
+    iY = yPosition
+
+    #get all info about the pose
+    goalX = goal.pose.position.x
+    goalY = goal.pose.position.y
+
+    quat = goal.pose.orientation
+    quat = [quat.x, quat.y, quat.z, quat.w]
+
+    roll, pitch, yaw = euler_from_quaternion(quat)
+
+    #convert yaw to degrees
+    goalAng = math.degrees(yaw)
+
+    print "spin!"
+    firstAng = math.degrees(math.atan2(goalY-yPosition,goalX-xPosition))
+    if (firstAng < -180):
+        print "TOO SMALL!!!!!"
+        firstAng = firstAng + 360
+    if (firstAng > 180):
+        print "TOO LARGE!!!!!"
+        firstAng = firstAng - 360
+    rotate(firstAng-theta)
+
+    print "move!"
+    curDist = math.sqrt(((iX - goalX) ** 2)+ ((iY - goalY) ** 2))
+    driveStraight(.25,curDist)
+
+    print "spin!"
+    rotate(goalAng - theta)
+
+    print "done"
 
 
-#This function works the same as rotate how ever it does not publish linear velocities.
+#This function works the same as rotate how ever it does publish linear velocities.
 def driveArc(radius, speed, angle):
-    #use forward kinematics here to determine wheelindividual wheel speeds
-    #use speed, to find time to traverse arc angle
-    #run for said time
-    pass  # Delete this 'pass' once implemented
+    global pose
+    global xPosition
+    global yPosition
+    global theta
 
+    #calc desited angular velocity
+    angVel = speed/radius
 
+    #calc needed destination angle
+    goalAng = theta + angle
 
+    while ((theta <= goalAng) and not rospy.is_shutdown()):
+        
+        publishTwist(speed * .25,angVel * .25)
+        #print "dest=%d, angle=%d" % (goalAng,theta)
 
 
 #Bumper Event Callback function
 def readBumper(msg):
     if (msg.state == 1):
         executeTrajectory()
-         # Delete this 'pass' once implemented
-
 
 
 # (Optional) If you need something to happen repeatedly at a fixed interval, write the code here.
@@ -153,6 +199,8 @@ def timerCallback(event):
 
     pass # Delete this 'pass' once implemented
 
+#publish Twist message using the Twist_pub publisher 
+#based upon the given x velocity and angular velocity around the z-axis
 def publishTwist(linearVelocity, angularVelocity):
     global Twist_pub
     msg = Twist()
@@ -162,64 +210,91 @@ def publishTwist(linearVelocity, angularVelocity):
 
 
 def odomCallback(event):
-    
     global pose
     global xPosition
     global yPosition
     global theta
-    print "hello"
-    odom_list.waitForTransform('odom', 'base_footprint', rospy.Time(0), rospy.Duration(1.0))
-    print "bye"
-    (position, orientation) = odom_list.lookupTransform('odom','base_footprint',rospy.Time(0))
-    pose.position.x=position[0]
-    pose.position.y=position[1]
+
+    odom_list.waitForTransform('map','base_footprint',rospy.Time(0),rospy.Duration(1.0))
+    #finds the position and oriention of two objects relative to each other
+    (position, orientation) = odom_list.lookupTransform('map','base_footprint', rospy.Time(0)) 
+    pose.pose.position.x = position[0]
+    pose.pose.position.y = position[1]
+
+    xPosition = position[0]
+    yPosition = position[1]
 
     odomW = orientation
-    q = [odomW[0], odomW[1], odomW[2], odomW[3]]
+    q = [odomW[0],odomW[1],odomW[2],odomW[3]]
     roll, pitch, yaw = euler_from_quaternion(q)
-    print pose.position.x
-    pose.orientation.z = yaw
+
+    #convert yaw to degrees
+    pose.pose.orientation.z = yaw
     theta = math.degrees(yaw)
-    
+
+#takes the list of waypoints (start ==> goal) and drives the turtlebot along the path
+def driveWaypoints(msg):
+    global tolerance
+    print "in drive"
+    a = 1
+    while ((a <= len(msg.waypoints)) and not rospy.is_shutdown()):
+        print "{}".format(a)
+        if(msg.waypoints[a].x - msg.waypoints[a-1].x > tolerance):
+            if(msg.waypoints[a].x > msg.waypoints[a-1].x):
+                print "rotate to +x"
+                rotate(90)
+            elif(msg.waypoints[a].x < msg.waypoints[a-1].x):
+                print "rotate to -x"
+                rotate(-90)
+            print "drive x"
+            driveStraight(0.25, msg.waypoints[a].x-msg.waypoints[a-1].x)
+        elif(msg.waypoints[a].y - msg.waypoints[a-1].y > tolerance):
+            if (msg.waypoints[a].y < msg.waypoints[a-1].y):
+                print "rotate to +y"
+                rotate(0)
+            if (msg.waypoints[a].y > msg.waypoints[a-1].y):
+                print "rotate to -y"
+                rotate (180)
+            print "drive y"
+            driveStraight(0.25, msg.waypoints[a].y-msg.waypoints[a-1].y)
+        a += 1
 
 
 # This is the program's main function
 if __name__ == '__main__':
     # Change this node name to include your username
-    rospy.init_node('sample_Lab_2__node_jltai')
+    rospy.init_node('Mag_Men_drive_node')
 
     # These are global variables. Write "global <variable_name>" in any other function to gain access to these global variables 
     global Twist_pub
     global pose
     global odom_tf
     global odom_list
-   
-    pose=Pose()
+    global tolerance #used for comparing floats
+
+    tolerance = .01 #used for comparing floats
+    pose=PoseStamped()
 
     theta = 0
     # Replace the elipses '...' in the following lines to set up the publishers and subscribers the lab requires
     Twist_pub = rospy.Publisher('cmd_vel_mux/input/teleop', Twist, None, queue_size = 10) # Publisher for commanding robot motion
     bumper_sub = rospy.Subscriber('mobile_base/events/Bumper', BumperEvent, readBumper, queue_size=1)
-    #Odom_sub = rospy.Subscriber("/odom", Odometry, odomCallback)
+    goal_sub = rospy.Subscriber('move_base_simple/goal',PoseStamped,navToPose,queue_size=1)
+    waypoint_sub = rospy.Subscriber('/waypoints',Waypoint,driveWaypoints,queue_size = 10)
     rospy.Timer(rospy.Duration(1), odomCallback)
 
     # Use this object to get the robot's Odometry 
     odom_list = tf.TransformListener()
-    
+    odom_sub = rospy.Subscriber("/odom", Odometry, odomCallback)
+
     # Use this command to make the program wait for some seconds
     #rospy.sleep(rospy.Duration(1, 0))
     print "Starting Lab 2"
 
-    #make the robot keep doing something...
-    #while(1):
-    #	pass
-    # Make the robot do stuff...
-
     #driveStraight(3,3)
-    rotate(90)
+    #rotate(90)
 
-    run_t = 300
-    start_t = rospy.Time.now().secs
-    while(rospy.Time.now().secs - start_t <= run_t and not rospy.is_shutdown()):
-    	print "running running running"
+    while(1 and not rospy.is_shutdown()):
+    	pass
+
     print "Lab 2 complete!"
