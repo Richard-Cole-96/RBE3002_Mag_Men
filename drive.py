@@ -237,7 +237,7 @@ def driveWaypoints(msg):
     global tolerance
     print "in drive"
     a = 1
-    while ((a <= len(msg.waypoints)) and not rospy.is_shutdown()):
+    while ((a < len(msg.waypoints)) and not rospy.is_shutdown()):
         print "{}".format(a)
         if(msg.waypoints[a].x - msg.waypoints[a-1].x > tolerance):
             if(msg.waypoints[a].x > msg.waypoints[a-1].x):
