@@ -51,27 +51,31 @@ def createGrid(event):
 		while (i < cols):
 			while (j < rows):
 				#check to see if cell is obstacle
-				print "obstacle check"
+				#print "obstacle check"
 				if(grid[i][j].obstacle == True):
-					print "obstacle true"
+					#print "obstacle true"
 					#if cell is obstacle, pad cells around it 
 					#if they are not obstacles too
 					if((i+1<rows) and (grid[i+1][j].obstacle == False)):
-						print "true true"
+						#print "true true"
 						publishPadCell(i+1,j)
 						grid[i+1][j].padding = True
+						time.sleep(.005)
 					if((j+1<cols) and (grid[i][j+1].obstacle == False)):
-						print "true true"
+						#print "true true"
 						publishPadCell(i,j+1)
 						grid[i][j+1].padding = True
+						time.sleep(.005)
 					if(grid[i][j-1].obstacle == False):
-						print "true true"
+						#print "true true"
 						publishPadCell(i,j-1)
 						grid[i][j-1].padding = True
+						time.sleep(.005)
 					if(grid[i-1][j].obstacle == False):
-						print "true true"
+						#print "true true"
 						publishPadCell(i-1,j)
 						grid[i-1][j].padding = True
+						time.sleep(.005)
 				j += 1
 			j = 0
 			i += 1
@@ -152,6 +156,21 @@ def AStar(initial, end):
 			#reconstruct_path not written
 			complete = True
 			path.append(goal)
+
+			#reset all visited attributes for next run
+			k = len(visited) - 1
+			while(k >= 0):
+				visited[k].visited = False
+				visited[k].inNotVisited = False
+				k -= 1
+
+			j = len(notVisited) - 1
+			while(j >= 0):
+				notVisited[j].visited = False
+				notVisited[j].inNotVisited = False
+				j -= 1
+
+			#create path and publish path and waypoints	
 			reconstruct_path(current) #reconstruct_path returns an array of nodes
 			return
 
@@ -175,7 +194,7 @@ def AStar(initial, end):
 		#check if children have been visited or not or if its an obstacle
 		k = len(children)-1
 		while(k >= 0):
-			if(children[k] in visited):
+			if(children[k].visited):
 				#print "children remove visited {}, {}".format(children[k].x,children[k].y)
 				children.remove(children[k])
 			elif(children[k].obstacle):
@@ -183,6 +202,9 @@ def AStar(initial, end):
 				children.remove(children[k])
 			elif(children[k].padding):
 				#print "children remove padding {}, {}".format(children[k].x,children[k].y)
+				children.remove(children[k])
+			elif(children[k].inNotVisited):
+				#print "children remove frontier {}, {}".format(children[k].x,children[k].y)
 				children.remove(children[k])
 			else:
 				pass
@@ -193,55 +215,86 @@ def AStar(initial, end):
 		#print ""
 
 		if(children):
-			#find the successor through the fcost comparison
-			children[0].calcCosts(start, goal)
 			for Node in children:
-				Node.calcCosts(start, goal)
 				Node.parent = current
+				Node.calcCosts(start, goal)
 				#print "child {}, {} Gcosts {}, Hcosts {}, Fcosts {}".format(Node.x,Node.y,Node.gCost,Node.hCost,Node.fCost)
 		
 			#place remaining children into notVisited nodes and publish them as Frontier
 			a = 0
 			while(a < len(children)):
-				notVisited.append(children[a])
+				#print "add {}, {}".format(children[a].x, children[a].y)
+				heapPushfCost(notVisited, children[a])
+				children[a].inNotVisited = True
+				#print "append {}, {}".format(children[a].x, children[a].y)
 				publishFrontierCell(children[a].x, children[a].y)
 				a += 1
 
 			#update the sets
-			visited.append(current)
-			publishVisitedCell(current.x, current.y)
+			#print "rem notVisited"
 			#print notVisited
+			#print ""
+			#print current
 			notVisited.remove(current)
+			visited.append(current)
+			current.visited = True
+			publishVisitedCell(current.x, current.y)
 
-			#iterate through notVisited to find lowest cost
+			#sort notVisited based on the fCost from low to high
+			#notVisited.sort(key=lambda node: node.fCost, reverse = False)
+			#pull first in list because has lowest cost
 			successor = notVisited[0]
-			for Node in notVisited:
-				if(Node.fCost <= successor.fCost):
-					successor = Node
 
 			current = successor
 
 		#else if children is empty go back 
-		elif(not children):
-			#print "no children"
+		else:
+			print "remove"
+			#print notVisited
+			#print ""
+			#print current
 			notVisited.remove(current)
 			visited.append(current)
+			current.visited = True
 			publishVisitedCell(current.x, current.y)
 
-			#iterate through notVisited to find lowest cost
+			#sort notVisited based on the fCost from low to high
+			#notVisited.sort(key=lambda node: node.fCost, reverse = False)
+			#pull first in list because has lowest cost
 			successor = notVisited[0]
-			for Node in notVisited:
-				if(Node.fCost <= successor.fCost):
-					successor = Node
 
 			current = successor
 
-		time.sleep(.25)
+		print "{}".format(len(notVisited))
+		
+		time.sleep(.005)	
 
 	#failed to find the goal
 	print "AStar Failed"
 	complete = True
 	return
+
+def heapPushfCost(uselist, item):
+
+	#print "inside"
+
+	if(not uselist):
+		#print "did not exist"
+		uselist.append(item)
+		return
+
+	#print "past"
+
+	i = 0
+	while(i < len(uselist) and not rospy.is_shutdown()):
+		if(item.fCost <= uselist[i].fCost):
+			#print "add list"
+			uselist.insert(i,item)
+			return
+		i += 1
+
+	#print "not smallest"
+	uselist.append(item)
 
 def reconstruct_path(step):
 	global path
@@ -276,7 +329,9 @@ def wayPoints(steps):
 	waypoint.append(point)
 	#start from the end
 	while (i > 0):
-		if((steps[i].x == steps[i-1].x) and not (steps[i].y == steps[i-1].y)):
+		if(len(steps) <= 2):
+			break
+		elif((steps[i].x == steps[i-1].x) and not (steps[i].y == steps[i-1].y)):
 			if(not (steps[i-1].x == steps[i-2].x) and (steps[i-1].y == steps[i-2].y)):
 				ways.append(steps[i-1])
 				point = Point()
