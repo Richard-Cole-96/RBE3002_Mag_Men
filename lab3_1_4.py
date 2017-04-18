@@ -21,6 +21,8 @@ def createGrid(event):
 	global Yoffset
 	global obstacle_cell_list
 	global pad_cell_list
+	global map_front
+	
 
 	if(not hasMap):
 		x = 0 
@@ -78,6 +80,11 @@ def createGrid(event):
 						publishPadCell(i-1,j)
 						grid[i-1][j].padding = True
 						time.sleep(.005)
+
+				if(grid[i][j].frontier == True):
+					map_front.append(grid[i][j])
+					publishMap_front(grid[i][j].x, grid[i][j].y)
+
 				j += 1
 			j = 0
 			i += 1
@@ -531,14 +538,43 @@ def publishFrontierCell(x, y):
 	msg.cell_width = grid_width
 	msg.cell_height = grid_height
 
-	point = Point()
-	point.x = (x * cell_size) + Xoffset + (cell_size/2)
-	point.y = (y * cell_size) + Yoffset + (cell_size/2)
+	msg.header = header
+	msg.cell_width = grid_width
+	msg.cell_height = grid_height
 
 	frontier_cell_list.append(point)
 	msg.cells = frontier_cell_list
 	frontier_pub.publish(msg) 
 	
+
+def publishMap_front(x, y)
+	global map_front_pub
+	global map_front_list
+	global cell_size
+	global Xoffset
+	global Yoffset
+
+	msg = GridCells()
+	grid_height = cell_size
+	grid_width = cell_size
+	header = Header()
+	header,frame_id = "map"
+
+	msg.header = header
+	msg.cell_width = grid_width
+	msg.cell_height = grid_height
+
+	msg.header = header
+	msg.cell_width = grid_width
+	msg.cell_height = grid_height
+
+	point = Point()
+	point.x = (x * cell_size) + Xoffset + (cell_size/2)
+	point.y = (y * cell_size) + Yoffset + (cell_size/2)
+
+	map_front_list.append(point)
+	msg.cells = map_front_list
+	map_front.publish(msg) 
 
 def publishPathCell(x, y):
 	global path_pub
@@ -566,6 +602,7 @@ def publishPathCell(x, y):
 	path_cell_list.append(point)
 	msg.cells = path_cell_list
 	path_pub.publish(msg) 
+
 
 def odomCallback(event):
     global pose
@@ -599,6 +636,7 @@ if __name__ == '__main__':
 	global pose 
 	global odom_tf
 	global frontier_cell_list
+	global map_front_list
 	global path_cell_list
 	global visited_cell_list
 	global blocked_cell_list #for storing points
@@ -621,6 +659,7 @@ if __name__ == '__main__':
 	#initialize variables
 	visited_cell_list = []
 	path_cell_list = []
+	map_front_list = []
 	frontier_cell_list = []
 	blocked_cell_list = []
 	pad_cell_list = []
@@ -648,7 +687,8 @@ if __name__ == '__main__':
 	pad_pub = rospy.Publisher('/padding', GridCells, queue_size = 25)
 	visited_pub = rospy.Publisher('/visited', GridCells, queue_size = 10)
 	block_pub = rospy.Publisher('/blocked', GridCells, queue_size = 10)
-	frontier_pub = rospy.Publisher('/frontier', GridCells, queue_size = 10)
+	frontier_pub = rospy.Publisher('/frontier', GridCells, queue_size = 10) #search frontier
+	map_front_pub = rospy.Publisher('/map_front', GridCells, queue_size = 10) # the frontiers on the map
 	path_pub = rospy.Publisher('/path', GridCells, queue_size = 10)
 	waypoint_pub = rospy.Publisher('/waypoints', Waypoint, queue_size = 1)
 	stop_pub = rospy.Publisher('/STOP' , Twist, queue_size = 1)
