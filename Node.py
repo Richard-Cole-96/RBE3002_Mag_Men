@@ -13,12 +13,16 @@ class Node:
 		self.visited = False
 		self.inNotVisited = False
 		self.padding = False
-		if (wallChance < 50):
+		self.frontier = False
+		if (wallChance < 40):
 			self.obstacle = False
-		elif(wallChance > 50):
+			self.frontier = False
+		elif(wallChance > 40 and wallChange < 60):
+			self.frontier = True
+			self.obstacle = False
+		elif(wallChance > 60 ):
 			self.obstacle = True
-		elif(wallChance == 50):
-			self.obstacle = None
+			self.frontier = False 
 			
 	def calculateGCosts(self,start):
 		#self.gCost = abs((start.x - self.x) * .3) + abs((start.y - self.y) * .3)
