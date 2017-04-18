@@ -12,7 +12,7 @@ import time
 from lab4.msg import Waypoint
 
 #creates a background grid of Nodes for us to access based upon the map OccupancyCells
-def createGrid(event):
+def createGrid(event, want_res):
 	global grid 
 	global cell_size
 	global hasMap
@@ -22,32 +22,73 @@ def createGrid(event):
 	global obstacle_cell_list
 	global pad_cell_list
 	global map_front
-	
 
 	if(not hasMap):
 		x = 0 
 		y = 0 
-		rows = event.info.height
-		cols = event.info.width
+
+		cell_size = event.info.resolution
+		print "map resolution = {}".format(cell_size)
+
+		if((want_res % cell_size) == 0):
+			res_offset = want_res/cell_size
+			int(res_offset)
+			print "grid resolution = {}".format(want_res)
+			print "grid offset = {}".format(res_offset)
+		else:
+			print "wanted resolution not attainable"
+			res_offset = want_res/cell_size
+			int(res_offset)
+			res_offset += 1
+			want_res = res_offset*cell_size
+			print "grid resolution = {}".format(want_res)
+			print "grid offset = {}".format(res_offset)
+
+		rows = event.info.height 
+		cols = event.info.width 
+		rowsStar = rows/res_offset
+		colsStar = cols/res_offset
 		Xoffset = event.info.origin.position.x
 		Yoffset = event.info.origin.position.y
 		print ("map rows = %d, map cols = %d" % (rows,cols))
 
-		cell_size = event.info.resolution
-		print ("map resolution = %f" % (cell_size))
-
 		grid = [[Node(0,0,50) for i in range(rows)] for j in range(cols)]
+		gridStar = [[Node(0,0,50) for i in range(rowsStar) for j in range(colsStar)]]
+
+		while(x < cols):
+			while(y < rows):
+				#assign a node to each grid cell
+				grid[x][y] = Node(x,y, event.data[x+(y*cols)])
+				#print "{}. {}".format(x,y)
+				y += 1
+			y = 0
+			x += 1
+
+		x = 0
+		y = 0
 
 		while (x < cols):
 			while (y < rows):
 				#asign a node to each grid item of node (x, y, wallchance)
-				grid[x][y] = Node(x, y, event.data[x+(y*cols)])
-				#print "{} {}".format(x,y)
-				if(grid[x][y].obstacle == True):
-					obstacle_cell_list.append(grid[x][y])
-				y += 1
+				offX = 0
+				offY = 0
+				counter = 0
+				saturation_val = int((res_offset**2)/4)
+				while (offX < res_offset and counter < saturation_val):
+					while(offY < res_offset and counter < saturation_val):
+						if(grid[x][y].obstacle):
+							counter += 1
+						offY += 1
+					offX += 1
+				if(counter >= saturation_val):
+					gridStar[x/res_offset][y/res_offset] = Node(x/res_offset, y/res_offset, 100)
+					obstacle_cell_list.append(gridStar[x/res_offset][y/res_offset])
+				else:
+					gridStar[x/res_offset][y/res_offset] = Node(x/res_offset, y/res_offset, 0)
+
+				y += res_offset
 			y = 0
-			x += 1
+			x += res_offset
 
 		i = 0
 		j = 0
@@ -89,12 +130,13 @@ def createGrid(event):
 			j = 0
 			i += 1
 		
-		start = grid[int(Xoffset / -cell_size)][int(Yoffset / -cell_size)]
+		start = grid[int(Xoffset / -want_res)][int(Yoffset / -want_res)]
 		print ("start(createGrid) = {},{}" .format(start.x,start.y))
 
 		print "map loaded"
 		hasMap = True
 
+# updates the goal cell of the TurtleBot for use in A* (does not care about orientation) (callback for /clicked_point)
 def updateGoal(msg):
 	global goal
 	global start
@@ -116,7 +158,7 @@ def updateGoal(msg):
 		print ("goalX = %d, goalY = %d" % (goal.x, goal.y))
 		hasGoal = True
 
-	
+# updates the starting cell of the TurtleBot for use in A* (does not care about orientation) (callback from /initialpose)
 def updateStart(msg):
 	global start
 	global complete
@@ -140,7 +182,6 @@ def updateStart(msg):
 		complete = False
 		print ("StartX = %d, StartY = %d" % (start.x, start.y))
 		hasStart = True
-
 	
 def reStar(msg):
 	global grid
@@ -149,7 +190,7 @@ def reStar(msg):
 
 	AStar(grid[int((msg.x / -cell_size) + start.x)][int((msg.y / -cell_size) + start.y)], goal)
 
-
+# function that runs the A* algorithm and publishes the proper path it's waypoints
 def AStar(initial, end):
 	global grid, complete
 	global start, goal
@@ -170,14 +211,13 @@ def AStar(initial, end):
 	current = initial 
 	notVisited.append(initial)
 
-	#is each node a point?
 	while (notVisited and not rospy.is_shutdown()):
 
 		i = 0
 		children = []
 		current.calcCosts(start,goal)
 
-		print "current {}, {}".format(current.x,current.y)
+		#print "current {}, {}".format(current.x,current.y)
 
 		#check if goal reached
 		if (current == end):
@@ -205,19 +245,19 @@ def AStar(initial, end):
 
 		# find the children
 		if (current.x + 1 < cols):
-			print "left child exists {},{}".format(current.x+1,current.y)
+			#print "left child exists {},{}".format(current.x+1,current.y)
 			children.append(grid[int(current.x+1)][int(current.y)])
 		if (current.y + 1 < rows):
-			print "bottom child exists {},{}".format(current.x,current.y+1)
+			#print "bottom child exists {},{}".format(current.x,current.y+1)
 			children.append(grid[int(current.x)][int(current.y+1)])
 		if (current.x - 1 > 0):
-			print "right child exists {},{}".format(current.x-1,current.y)
+			#print "right child exists {},{}".format(current.x-1,current.y)
 			children.append(grid[int(current.x-1)][int(current.y)])
 		if (current.y - 1 > 0):
-			print "top child exists {},{}".format(current.x,current.y-1)
+			#print "top child exists {},{}".format(current.x,current.y-1)
 			children.append(grid[int(current.x)][int(current.y-1)])
 
-		print ""
+		#print ""
 		#print "check children"
 
 		#check if children have been visited or not or if its an obstacle
@@ -256,7 +296,7 @@ def AStar(initial, end):
 				heapPushfCost(notVisited, children[a])
 				children[a].inNotVisited = True
 				#print "append {}, {}".format(children[a].x, children[a].y)
-				publishFrontierCell(children[a].x, children[a].y)
+				#publishFrontierCell(children[a].x, children[a].y)
 				a += 1
 
 			#update the sets
@@ -267,10 +307,8 @@ def AStar(initial, end):
 			notVisited.remove(current)
 			visited.append(current)
 			current.visited = True
-			publishVisitedCell(current.x, current.y)
+			#publishVisitedCell(current.x, current.y)
 
-			#sort notVisited based on the fCost from low to high
-			#notVisited.sort(key=lambda node: node.fCost, reverse = False)
 			#pull first in list because has lowest cost
 			successor = notVisited[0]
 
@@ -278,31 +316,33 @@ def AStar(initial, end):
 
 		#else if children is empty go back 
 		else:
-			print "remove"
+			#print "remove"
 			#print notVisited
 			#print ""
 			#print current
 			notVisited.remove(current)
 			visited.append(current)
 			current.visited = True
-			publishVisitedCell(current.x, current.y)
+			#publishVisitedCell(current.x, current.y)
 
-			#sort notVisited based on the fCost from low to high
-			#notVisited.sort(key=lambda node: node.fCost, reverse = False)
 			#pull first in list because has lowest cost
 			successor = notVisited[0]
 
 			current = successor
 
-		print "{}".format(len(notVisited))
+		#print "{}".format(len(notVisited))
 		
 		time.sleep(.005)	
 
 	#failed to find the goal
 	print "AStar Failed"
 	complete = True
+
+	#TODO add thing that publishes message saying A* failed
+
 	return
 
+# this function adds the item to the uselist based upon the fCost of the item (item must be a Node)
 def heapPushfCost(uselist, item):
 
 	#print "inside"
@@ -325,6 +365,7 @@ def heapPushfCost(uselist, item):
 	#print "not smallest"
 	uselist.append(item)
 
+# constructs the path from the completed A* function
 def reconstruct_path(step):
 	global path
 
@@ -335,6 +376,7 @@ def reconstruct_path(step):
 		publishPath(path)
 		wayPoints(path)
 
+# publishes and prints the path determined by A* in the order that the TurtleBot will visit them
 def publishPath(steps):
 	print "Paths : "
 	i = len(steps) - 1
@@ -344,6 +386,7 @@ def publishPath(steps):
 		i -= 1
 	print ""
 
+# publishes the waypoints deternimed from the path in the order that the TurtleBot will visit them
 def wayPoints(steps):
 	global tolerance
 	global cell_size
@@ -434,9 +477,8 @@ def newCost(msg):
 					grid[x][y].obstacle = False
 		y = 0
 		x += 1
-
 	
-
+# publishes a Visited Cell (for use with A*) centered at choords (x,y)
 def publishVisitedCell(x, y):
 	global visited_pub
 	global visited_cell_list
@@ -464,6 +506,7 @@ def publishVisitedCell(x, y):
 	msg.cells = visited_cell_list
 	visited_pub.publish(msg)
 
+# publishes a Padding Cell centered at choords (x,y)
 def publishPadCell(x, y):
 	global pad_pub
 	global padding_cell_list
@@ -491,6 +534,7 @@ def publishPadCell(x, y):
 	msg.cells = padding_cell_list
 	pad_pub.publish(msg)
 
+# publishes a Obstacle Cell centered at choords (x,y)
 def publishBlockedCell(x, y):
 	global block_pub
 	global blocked_cell_list
@@ -518,7 +562,7 @@ def publishBlockedCell(x, y):
 	msg.cells = blocked_cell_list
 	block_pub.publish(msg)
 
-
+# publishes a Frontier Cell (for use with A* visualization) centered at choords (x,y)
 def publishFrontierCell(x, y):
 	global frontier_pub
 	global frontier_cell_list
@@ -546,8 +590,8 @@ def publishFrontierCell(x, y):
 	msg.cells = frontier_cell_list
 	frontier_pub.publish(msg) 
 	
-
-def publishMap_front(x, y)
+# publishes a Map Frontier Cell centered at choords (x,y)
+def publishMap_front(x, y):
 	global map_front_pub
 	global map_front_list
 	global cell_size
@@ -576,6 +620,7 @@ def publishMap_front(x, y)
 	msg.cells = map_front_list
 	map_front.publish(msg) 
 
+# publishes a Path Cell centered at choords (x,y)
 def publishPathCell(x, y):
 	global path_pub
 	global path_cell_list
@@ -603,7 +648,7 @@ def publishPathCell(x, y):
 	msg.cells = path_cell_list
 	path_pub.publish(msg) 
 
-
+#callback for the /odom subscriber
 def odomCallback(event):
     global pose
     global xPosition
@@ -655,6 +700,7 @@ if __name__ == '__main__':
 	global hasGoal
 	global tolerance #used for comparing floats
 
+	wanted_resolution = 0.3 #resolution wanted for the map
 
 	#initialize variables
 	visited_cell_list = []
@@ -666,18 +712,14 @@ if __name__ == '__main__':
 	obstacle_cell_list = []
 	padding_cell_list = []
 	pose = PoseStamped()
-	cell_size = 0.05
-	Xoffset = -15.4
-	Yoffset = -12.2
-	start = Node(int(Xoffset / -cell_size), int(Yoffset / -cell_size),0)
-	print ("start(init) = {},{}" .format(start.x,start.y))
+	cell_size = 0.05 #this is the default value for gMapping cell size
 	goal = Node(0,0,0)
 	complete = True
 	hasMap = False
 	hasGoal = False
-	#uncomment if want to tell start position
+	#uncomment line below if want to tell start position from RVIZ
 	#hasStart = False
-	#comment if want to tell start position
+	#comment line below if want to tell start position
 	hasStart = True
 	rows = 0
 	cols = 0
@@ -694,9 +736,10 @@ if __name__ == '__main__':
 	stop_pub = rospy.Publisher('/STOP' , Twist, queue_size = 1)
 
 	#initialize subscribers
-	map_sub = rospy.Subscriber('/map', OccupancyGrid, createGrid)
+	map_sub = rospy.Subscriber('/map', OccupancyGrid, createGrid, wanted_resolution)
 	roboMap_sub = rospy.Subscriber('/move_base/global_costmap/costmap', OccupancyGrid, newCost)
 	goal_sub = rospy.Subscriber('/clicked_point', PointStamped, updateGoal)
+	#uncomment line below if want to tell start position from RVIZ
 	#start_sub = rospy.Subscriber('/initialpose', PoseWithCovarianceStamped, updateStart)
 	reStar_sub = rospy.Subscriber('/newPoint', Point, reStar)
 
