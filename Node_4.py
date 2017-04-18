@@ -13,26 +13,23 @@ class Node:
 		self.visited = False
 		self.inNotVisited = False
 		self.padding = False
-		self.frontier = False
-		if (wallChance < 40):
+		self.costMap = 0
+		if (wallChance < 50):
 			self.obstacle = False
-			self.frontier = False
-		elif(wallChance > 40 and wallChange < 60):
-			self.frontier = True
-			self.obstacle = False
-		elif(wallChance > 60 ):
+		elif(wallChance > 50):
 			self.obstacle = True
-			self.frontier = False 
+		elif(wallChance == 50):
+			self.obstacle = None
 			
 	def calculateGCosts(self,start):
-		#self.gCost = abs((start.x - self.x) * .3) + abs((start.y - self.y) * .3)
+		#self.gCost = abs((start.x - self.x) * .05) + abs((start.y - self.y) * .05)
 		if(self.parent == None):
 			self.gCost = 0
 		else:
-			self.gCost = self.parent.gCost + .3
+			self.gCost = self.parent.gCost + .05
 
 	def calculateHCosts(self,goal):
-		self.hCost = math.sqrt((((goal.x - self.x) * .3) ** 2) + (((goal.y - self.y) * .3) ** 2))
+		self.hCost = math.sqrt((((goal.x - self.x) * .05) ** 2) + (((goal.y - self.y) * .05) ** 2))
 
 	def calculateFCosts(self):
 		self.fCost = self.gCost+self.hCost
