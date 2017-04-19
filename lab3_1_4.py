@@ -9,11 +9,12 @@ from geometry_msgs.msg import PoseStamped, Pose, Point, PointStamped, PoseWithCo
 from tf.transformations import euler_from_quaternion
 from Node import Node
 import time
-from lab4.msg import Waypoint
+from rpcole_lab2.msg import Waypoint
 
 #creates a background grid of Nodes for us to access based upon the map OccupancyCells
 def createGrid(event, want_res):
 	global grid 
+	global gridStar
 	global cell_size
 	global hasMap
 	global rows, cols
@@ -21,7 +22,7 @@ def createGrid(event, want_res):
 	global Yoffset
 	global obstacle_cell_list
 	global pad_cell_list
-	global map_front
+	global map_front_list
 
 	if(not hasMap):
 		x = 0 
@@ -29,31 +30,47 @@ def createGrid(event, want_res):
 
 		cell_size = event.info.resolution
 		print "map resolution = {}".format(cell_size)
-
-		if((want_res % cell_size) == 0):
-			res_offset = want_res/cell_size
-			int(res_offset)
+		print "want resolution = {}".format(want_res)
+		print "mod res = {}".format(want_res % cell_size)
+		print "check res = {}".format(cell_size - (want_res % cell_size))
+		print "check val = {}".format(0.001)
+		if(cell_size - (want_res % cell_size) <= 0.001):
+			res_offset = int(want_res/cell_size) + 1
 			print "grid resolution = {}".format(want_res)
 			print "grid offset = {}".format(res_offset)
+			cell_size = res_offset*cell_size
+			print "cell size is now {}".format(cell_size)
+
 		else:
 			print "wanted resolution not attainable"
-			res_offset = want_res/cell_size
-			int(res_offset)
-			res_offset += 1
+			res_offset = int(want_res/cell_size) + 1
 			want_res = res_offset*cell_size
 			print "grid resolution = {}".format(want_res)
 			print "grid offset = {}".format(res_offset)
+			cell_size = want_res
+			print "cell size is now {}".format(cell_size)
 
 		rows = event.info.height 
-		cols = event.info.width 
-		rowsStar = rows/res_offset
-		colsStar = cols/res_offset
+		cols = event.info.width
+		if(rows % res_offset == 0):
+			rowsStar = int(rows/res_offset)
+			colsStar = int(cols/res_offset)
+		else:
+			rowsStar = int(rows/res_offset) + 1
+			colsStar = int(cols/res_offset) + 1
 		Xoffset = event.info.origin.position.x
 		Yoffset = event.info.origin.position.y
-		print ("map rows = %d, map cols = %d" % (rows,cols))
+		print "map rows = {}, map cols = {}".format(rows,cols)
+		print "grid rows = {}, grid cols = {}".format(rowsStar,colsStar)
 
 		grid = [[Node(0,0,50) for i in range(rows)] for j in range(cols)]
-		gridStar = [[Node(0,0,50) for i in range(rowsStar) for j in range(colsStar)]]
+		gridStar = [[Node(0,0,50) for a in range(rowsStar)] for b in range(colsStar)]
+
+		#print " map rows = {} map cols = {}".format(len(grid),len(grid[0]))
+		#print " gridStar rows = {} gridStar cols = {}".format(len(gridStar),len(gridStar[0]))
+
+		x = 0
+		y = 0
 
 		while(x < cols):
 			while(y < rows):
@@ -67,24 +84,42 @@ def createGrid(event, want_res):
 		x = 0
 		y = 0
 
+		# changes resolution
 		while (x < cols):
 			while (y < rows):
 				#asign a node to each grid item of node (x, y, wallchance)
 				offX = 0
 				offY = 0
-				counter = 0
+				obsCounter = 0
+				frontCounter = 0
 				saturation_val = int((res_offset**2)/4)
-				while (offX < res_offset and counter < saturation_val):
-					while(offY < res_offset and counter < saturation_val):
+				if(saturation_val == 0):
+					saturation_val = 1
+				while (offX < res_offset):
+					while(offY < res_offset):
 						if(grid[x][y].obstacle):
-							counter += 1
+							obsCounter += 1
+						if(grid[x][y].frontier):
+							frontCounter += 1
 						offY += 1
 					offX += 1
-				if(counter >= saturation_val):
-					gridStar[x/res_offset][y/res_offset] = Node(x/res_offset, y/res_offset, 100)
-					obstacle_cell_list.append(gridStar[x/res_offset][y/res_offset])
+
+				xPos = int(x/res_offset)
+				yPos = int(y/res_offset)
+				#print "at offseted {},{}".format(xPos,yPos)
+
+				if(frontCounter >= 1):
+					gridStar[xPos][yPos] = Node(xPos, yPos, 50)
+					#print "frontier"
+				elif(obsCounter >= saturation_val):
+					gridStar[xPos][yPos] = Node(xPos, yPos, 100)
+					#print "obstacle"
+					publishBlockedCell(xPos,yPos)
+					obstacle_cell_list.append(gridStar[xPos][yPos])
+					time.sleep(.005)
 				else:
-					gridStar[x/res_offset][y/res_offset] = Node(x/res_offset, y/res_offset, 0)
+					gridStar[xPos][yPos] = Node(xPos, yPos, 0)
+					#print "open"
 
 				y += res_offset
 			y = 0
@@ -93,44 +128,46 @@ def createGrid(event, want_res):
 		i = 0
 		j = 0
 
-		while (i < cols):
-			while (j < rows):
+		while (i < colsStar):
+			while (j < rowsStar):
 				#check to see if cell is obstacle
 				#print "obstacle check"
-				if(grid[i][j].obstacle == True):
+				if(gridStar[i][j].obstacle == True):
 					#print "obstacle true"
 					#if cell is obstacle, pad cells around it 
 					#if they are not obstacles too
-					if((i+1<rows) and (grid[i+1][j].obstacle == False)):
+					if((i+1<rowsStar) and (gridStar[i+1][j].obstacle == False)):
 						#print "true true"
 						publishPadCell(i+1,j)
-						grid[i+1][j].padding = True
+						gridStar[i+1][j].padding = True
 						time.sleep(.005)
-					if((j+1<cols) and (grid[i][j+1].obstacle == False)):
+					if((j+1<colsStar) and (gridStar[i][j+1].obstacle == False)):
 						#print "true true"
 						publishPadCell(i,j+1)
-						grid[i][j+1].padding = True
+						gridStar[i][j+1].padding = True
 						time.sleep(.005)
-					if(grid[i][j-1].obstacle == False):
+					if(gridStar[i][j-1].obstacle == False):
 						#print "true true"
 						publishPadCell(i,j-1)
-						grid[i][j-1].padding = True
+						gridStar[i][j-1].padding = True
 						time.sleep(.005)
-					if(grid[i-1][j].obstacle == False):
+					if(gridStar[i-1][j].obstacle == False):
 						#print "true true"
 						publishPadCell(i-1,j)
-						grid[i-1][j].padding = True
+						gridStar[i-1][j].padding = True
 						time.sleep(.005)
 
-				if(grid[i][j].frontier == True):
-					map_front.append(grid[i][j])
-					publishMap_front(grid[i][j].x, grid[i][j].y)
+				if(gridStar[i][j].frontier == True):
+					map_front_list.append(gridStar[i][j])
+					publishMap_front(gridStar[i][j].x, gridStar[i][j].y)
+					time.sleep(.005)
 
 				j += 1
 			j = 0
 			i += 1
 		
-		start = grid[int(Xoffset / -want_res)][int(Yoffset / -want_res)]
+		# TODO look at if this still works with gridStar
+		start = gridStar[int(Xoffset / -want_res)][int(Yoffset / -want_res)]
 		print ("start(createGrid) = {},{}" .format(start.x,start.y))
 
 		print "map loaded"
@@ -593,7 +630,7 @@ def publishFrontierCell(x, y):
 # publishes a Map Frontier Cell centered at choords (x,y)
 def publishMap_front(x, y):
 	global map_front_pub
-	global map_front_list
+	global map_frontier_list
 	global cell_size
 	global Xoffset
 	global Yoffset
@@ -602,7 +639,7 @@ def publishMap_front(x, y):
 	grid_height = cell_size
 	grid_width = cell_size
 	header = Header()
-	header,frame_id = "map"
+	header.frame_id = "map"
 
 	msg.header = header
 	msg.cell_width = grid_width
@@ -616,9 +653,9 @@ def publishMap_front(x, y):
 	point.x = (x * cell_size) + Xoffset + (cell_size/2)
 	point.y = (y * cell_size) + Yoffset + (cell_size/2)
 
-	map_front_list.append(point)
-	msg.cells = map_front_list
-	map_front.publish(msg) 
+	map_frontier_list.append(point)
+	msg.cells = map_frontier_list
+	map_front_pub.publish(msg) 
 
 # publishes a Path Cell centered at choords (x,y)
 def publishPathCell(x, y):
@@ -677,11 +714,12 @@ if __name__ == '__main__':
 
 	rospy.init_node('Mag_Men_Astar')
 
-	global visited_pub, block_pub, frontier_pub, unknown_pub, path_pub, pad_pub
+	global visited_pub, block_pub, frontier_pub, unknown_pub, path_pub, pad_pub, map_front_pub
 	global pose 
 	global odom_tf
-	global frontier_cell_list
-	global map_front_list
+	global frontier_cell_list #for storing points
+	global map_front_list #for storing nodes
+	global map_frontier_list #for storing points
 	global path_cell_list
 	global visited_cell_list
 	global blocked_cell_list #for storing points
@@ -699,6 +737,8 @@ if __name__ == '__main__':
 	global hasStart
 	global hasGoal
 	global tolerance #used for comparing floats
+	global grid 
+	global gridStar
 
 	wanted_resolution = 0.3 #resolution wanted for the map
 
@@ -706,6 +746,7 @@ if __name__ == '__main__':
 	visited_cell_list = []
 	path_cell_list = []
 	map_front_list = []
+	map_frontier_list = []
 	frontier_cell_list = []
 	blocked_cell_list = []
 	pad_cell_list = []
@@ -745,7 +786,6 @@ if __name__ == '__main__':
 
 	
 	print "Lab 3 Started"
-	print "start(begin) {},{}".format(start.x,start.y)
 	while(1 and not rospy.is_shutdown()):
 		
 		while(not complete and hasStart and hasGoal):
