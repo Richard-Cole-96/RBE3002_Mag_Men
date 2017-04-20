@@ -7,7 +7,7 @@ from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import PoseStamped, Pose, Point
 from tf.transformations import euler_from_quaternion
-from lab4.msg import Waypoint
+from rpcole_lab2.msg import Waypoint
 
 
 #drive to a goal subscribed as /move_base_simple/goal
@@ -72,12 +72,14 @@ def driveStraight(speed, distance):
         #print currentX
         #print speed
         currentDistance = math.sqrt(((currentX - initialx)**2) + ((currentY - initialy)**2))
+        print "distance traveled = {}".format(currentDistance)
         publishTwist(speed,0)
-        if (currentDistance == distance):
+        if (currentDistance >= distance):
         	atTarget = True
 
+
 	publishTwist(0,0)           
-      
+    print "ARRIVED!"
     #print "ok next"
 
     
@@ -106,18 +108,33 @@ def rotate(angle):
         angle = -180 + excess
 
     error = angle-theta
+    error2 = 720
+
 
     ##determine which way to turn based on angle
 
-    while((abs(error) >= 2) and not rospy.is_shutdown()):
-        
+    while((abs(error) >= 1) and not rospy.is_shutdown()): 
+
         if (angle > originTheta):
             vel = 0.35
         elif (angle < originTheta):
             vel = -0.35
         #recalc error and publish twist to move turtlebot
      	publishTwist(0.0,vel)
+        
+        #error 
+        error2 = error
         error = angle-theta
+
+        print "theta = {}, error = {}".format(theta,error)
+        print ""
+
+        # in case we are looking for 180 and -180 and overshoot
+        if (abs(abs(error2) - abs(error)) > 90):
+            print "range flip"
+            vel = 0
+            publishTwist(0.0, vel)
+            error = 0
 
     #rotation complete so stop movement
     vel = 0
@@ -189,7 +206,10 @@ def driveArc(radius, speed, angle):
 #Bumper Event Callback function
 def readBumper(msg):
     if (msg.state == 1):
-        executeTrajectory()
+        print "bumper"
+        #executeTrajectory()
+        driveStraight(0.1,0.5)
+
 
 
 # (Optional) If you need something to happen repeatedly at a fixed interval, write the code here.
@@ -214,6 +234,7 @@ def odomCallback(event):
     global xPosition
     global yPosition
     global theta
+    global hasPos
 
     odom_list.waitForTransform('map','base_footprint',rospy.Time(0),rospy.Duration(1.0))
     #finds the position and oriention of two objects relative to each other
@@ -223,6 +244,7 @@ def odomCallback(event):
 
     xPosition = position[0]
     yPosition = position[1]
+    #print "position {},{}".format(xPosition,yPosition)
 
     odomW = orientation
     q = [odomW[0],odomW[1],odomW[2],odomW[3]]
@@ -231,6 +253,7 @@ def odomCallback(event):
     #convert yaw to degrees
     pose.pose.orientation.z = yaw
     theta = math.degrees(yaw)
+    hasPos = True
 
 #takes the list of waypoints (start ==> goal) and drives the turtlebot along the path
 def driveWaypoints(msg):
@@ -306,17 +329,19 @@ if __name__ == '__main__':
     global odom_tf
     global odom_list
     global tolerance #used for comparing floats
+    global hasPos
 
     tolerance = .01 #used for comparing floats
     pose=PoseStamped()
+    hasPos = False
 
     theta = 0
     # Replace the elipses '...' in the following lines to set up the publishers and subscribers the lab requires
     Twist_pub = rospy.Publisher('cmd_vel_mux/input/teleop', Twist, None, queue_size = 10) # Publisher for commanding robot motion
     loc_pub = rospy.Publisher('/localPose', Point, queue_size = 1)
-    bumper_sub = rospy.Subscriber('mobile_base/events/Bumper', BumperEvent, readBumper, queue_size=1)
     goal_sub = rospy.Subscriber('move_base_simple/goal',PoseStamped,navToPose,queue_size=1)
     waypoint_sub = rospy.Subscriber('/waypoints',Waypoint,driveWaypoint,queue_size = 10)
+    bumper_sub = rospy.Subscriber('/mobile_base/events/Bumper', BumperEvent, readBumper, queue_size=1)
     newLoc_pub = rospy.Publisher('/newPoint', Point, queue_size = 1)
     rospy.Timer(rospy.Duration(1), odomCallback)
 
@@ -328,8 +353,14 @@ if __name__ == '__main__':
     #rospy.sleep(rospy.Duration(1, 0))
     print "Starting drive"
 
-    #driveStraight(3,3)
-    #rotate(90)
+    while(not hasPos):
+        pass
+
+    print "has position"
+
+    driveStraight(0.25,0.5)
+    rotate(90)
+    driveStraight(0.25,0.5)
 
     while(1 and not rospy.is_shutdown()):
     	pass
