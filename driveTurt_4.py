@@ -253,7 +253,9 @@ def odomCallback(event):
     #convert yaw to degrees
     pose.pose.orientation.z = yaw
     theta = math.degrees(yaw)
+
     hasPos = True
+    sendLocation()
 
 #takes the list of waypoints (start ==> goal) and drives the turtlebot along the path
 def driveWaypoints(msg):
@@ -281,6 +283,22 @@ def driveWaypoints(msg):
             print "drive y"
             driveStraight(0.25, msg.waypoints[a].y-msg.waypoints[a-1].y)
         a += 1
+
+def sendLocation():
+	global xPosition
+	global yPosition
+	global newFrontierGoal_pub
+
+	newMsg = Point()
+
+	newMsg.x = xPosition
+	newMsg.y = yPosition
+
+	newFrontierGoal_pub.publish(newMsg)
+
+
+
+
 
 #drive to one waypoint
 def driveWaypoint(msg):
@@ -325,6 +343,7 @@ if __name__ == '__main__':
     # These are global variables. Write "global <variable_name>" in any other function to gain access to these global variables 
     global Twist_pub
     global newLoc_pub
+    global newFrontierGoal_pub
     global pose
     global odom_tf
     global odom_list
@@ -338,12 +357,15 @@ if __name__ == '__main__':
     theta = 0
     # Replace the elipses '...' in the following lines to set up the publishers and subscribers the lab requires
     Twist_pub = rospy.Publisher('cmd_vel_mux/input/teleop', Twist, None, queue_size = 10) # Publisher for commanding robot motion
-    loc_pub = rospy.Publisher('/localPose', Point, queue_size = 1)
+    #loc_pub = rospy.Publisher('/newPoint', Point, queue_size = 1)
+    bumper_sub = rospy.Subscriber('mobile_base/events/Bumper', BumperEvent, readBumper, queue_size=1)
     goal_sub = rospy.Subscriber('move_base_simple/goal',PoseStamped,navToPose,queue_size=1)
     waypoint_sub = rospy.Subscriber('/waypoints',Waypoint,driveWaypoint,queue_size = 10)
-    bumper_sub = rospy.Subscriber('/mobile_base/events/Bumper', BumperEvent, readBumper, queue_size=1)
-    newLoc_pub = rospy.Publisher('/newPoint', Point, queue_size = 1)
+    newLoc_pub = rospy.Publisher('/re_path_waypoint', Point, queue_size = 1)
+    newFrontierGoal_pub = rospy.Publisher('/newPoint', Point, queue_size = 1)
+
     rospy.Timer(rospy.Duration(1), odomCallback)
+
 
     # Use this object to get the robot's Odometry 
     odom_list = tf.TransformListener()
