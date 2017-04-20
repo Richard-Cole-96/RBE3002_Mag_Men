@@ -17,7 +17,7 @@ class Node:
 		if (wallChance < 40):
 			self.obstacle = False
 			self.frontier = False
-		elif(wallChance > 40 and wallChange < 60):
+		elif(wallChance > 40 and wallChance < 60):
 			self.frontier = True
 			self.obstacle = False
 		elif(wallChance > 60 ):
