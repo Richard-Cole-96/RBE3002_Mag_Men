@@ -219,13 +219,27 @@ def updateStart(msg):
 		complete = False
 		print ("StartX = %d, StartY = %d" % (start.x, start.y))
 		hasStart = True
-	
-def reStar(msg):
+
+#reAstars with a new starting point || takes a new start node or message
+def reStar_start(msg):
+	global grid
+	global goal
+	global cell_size
+	global start
+
+	start = grid[int((msg.x / -cell_size))][int((msg.y / -cell_size) )]
+
+	AStar(start, goal)
+
+#reAstars with new goal || takes a new goal node or message
+def reStar_goal(msg):
 	global grid
 	global goal
 	global cell_size
 
-	AStar(grid[int((msg.x / -cell_size) + start.x)][int((msg.y / -cell_size) + start.y)], goal)
+	goal = grid[int((msg.x/ -cell_size))][int((msg.y / -cell_size))]
+
+	AStar(start, goal)
 
 # function that runs the A* algorithm and publishes the proper path it's waypoints
 def AStar(initial, end):
@@ -657,6 +671,29 @@ def publishMap_front(x, y):
 	msg.cells = map_frontier_list
 	map_front_pub.publish(msg) 
 
+
+#findsthe nearest frontier cell on the map to the robots current position on the map and then reStars to it
+def nearest_front(msg):
+	global gridStar
+	global Xoffset
+	global Yoffset
+	global cell_size
+	global map_frontier_list
+
+	curX = msg.x
+	curY = msg.y
+	closest = map_frontier_list[0]
+
+	i = 0
+	while(i < len(map_frontier_list) ):
+		if((closest.x < map_frontier_list[i].x) or (closest.y < map_frontier_list[i].y)):
+			closest = map_frontier_list[i]
+
+	#creates a new restar using the closest as new goal
+	reStar_goal(closest)
+
+
+
 # publishes a Path Cell centered at choords (x,y)
 def publishPathCell(x, y):
 	global path_pub
@@ -776,13 +813,17 @@ if __name__ == '__main__':
 	waypoint_pub = rospy.Publisher('/waypoints', Waypoint, queue_size = 1)
 	stop_pub = rospy.Publisher('/STOP' , Twist, queue_size = 1)
 
+
 	#initialize subscribers
 	map_sub = rospy.Subscriber('/map', OccupancyGrid, createGrid, wanted_resolution)
 	roboMap_sub = rospy.Subscriber('/move_base/global_costmap/costmap', OccupancyGrid, newCost)
 	goal_sub = rospy.Subscriber('/clicked_point', PointStamped, updateGoal)
 	#uncomment line below if want to tell start position from RVIZ
 	#start_sub = rospy.Subscriber('/initialpose', PoseWithCovarianceStamped, updateStart)
-	reStar_sub = rospy.Subscriber('/newPoint', Point, reStar)
+
+	#we probably need a new subscriber for it to work with a new waypoint
+	reStar_sub = rospy.Subscriber('/re_path_waypoint', Point, reStar_start)
+	nearest_front_sub = rospy.Subscriber('/newPoint', Point, nearest_front)
 
 	
 	print "Lab 3 Started"
