@@ -7,7 +7,7 @@ from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import PoseStamped, Pose, Point
 from tf.transformations import euler_from_quaternion
-from rpcole_lab2.msg import Waypoint
+from final_lab.msg import Waypoint
 
 
 #drive to a goal subscribed as /move_base_simple/goal
@@ -361,6 +361,8 @@ if __name__ == '__main__':
     bumper_sub = rospy.Subscriber('mobile_base/events/Bumper', BumperEvent, readBumper, queue_size=1)
     goal_sub = rospy.Subscriber('move_base_simple/goal',PoseStamped,navToPose,queue_size=1)
     waypoint_sub = rospy.Subscriber('/waypoints',Waypoint,driveWaypoint,queue_size = 10)
+
+
     newLoc_pub = rospy.Publisher('/re_path_waypoint', Point, queue_size = 1)
     newFrontierGoal_pub = rospy.Publisher('/newPoint', Point, queue_size = 1)
 
@@ -380,9 +382,9 @@ if __name__ == '__main__':
 
     print "has position"
 
-    driveStraight(0.25,0.5)
-    rotate(90)
-    driveStraight(0.25,0.5)
+    #driveStraight(0.25,0.5)
+    #rotate(90)
+    #driveStraight(0.25,0.5)
 
     while(1 and not rospy.is_shutdown()):
     	pass

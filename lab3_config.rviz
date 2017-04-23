@@ -5,7 +5,6 @@ Panels:
     Property Tree Widget:
       Expanded:
         - /Global Options1
-        - /Grid1/Offset1
       Splitter Ratio: 0.5
     Tree Height: 463
   - Class: rviz/Selection
@@ -41,8 +40,8 @@ Visualization Manager:
       Name: Grid
       Normal Cell Count: 0
       Offset:
-        X: 0.5
-        Y: 0
+        X: -1
+        Y: -13.8
         Z: 0
       Plane: XY
       Plane Cell Count: 10
@@ -244,9 +243,6 @@ Visualization Manager:
       Class: rviz/Path
       Color: 255; 85; 255
       Enabled: true
-      Head Diameter: 0.3
-      Head Length: 0.2
-      Length: 0.3
       Line Style: Lines
       Line Width: 0.03
       Name: Path
@@ -254,10 +250,6 @@ Visualization Manager:
         X: 0
         Y: 0
         Z: 0
-      Pose Style: None
-      Radius: 0.03
-      Shaft Diameter: 0.1
-      Shaft Length: 0.1
       Topic: ""
       Unreliable: false
       Value: true
@@ -337,22 +329,22 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 21.7634
+      Distance: 38.4135
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.06
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 4.43651
-        Y: 4.1436
-        Z: -2.40299
+        X: -0.938748
+        Y: -1.64351
+        Z: 1.69815
       Name: Current View
       Near Clip Distance: 0.01
-      Pitch: 1.1198
+      Pitch: 0.729801
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz)
-      Yaw: 1.0204
+      Yaw: 1.1054
     Saved: ~
 Window Geometry:
   Displays:
@@ -370,5 +362,5 @@ Window Geometry:
   Views:
     collapsed: true
   Width: 1301
-  X: 65
-  Y: 24
+  X: 637
+  Y: 40

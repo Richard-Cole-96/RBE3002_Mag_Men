@@ -9,7 +9,7 @@ from geometry_msgs.msg import PoseStamped, Pose, Point, PointStamped, PoseWithCo
 from tf.transformations import euler_from_quaternion
 from Node import Node
 import time
-from rpcole_lab2.msg import Waypoint
+from final_lab.msg import Waypoint
 
 #creates a background grid of Nodes for us to access based upon the map OccupancyCells
 def createGrid(event, want_res):
@@ -28,19 +28,21 @@ def createGrid(event, want_res):
 		x = 0 
 		y = 0 
 
+		Xoffset = event.info.origin.position.x
+		Yoffset = event.info.origin.position.y
+
 		cell_size = event.info.resolution
 		print "map resolution = {}".format(cell_size)
 		print "want resolution = {}".format(want_res)
-		print "mod res = {}".format(want_res % cell_size)
-		print "check res = {}".format(cell_size - (want_res % cell_size))
-		print "check val = {}".format(0.001)
+		#print "mod res = {}".format(want_res % cell_size)
+		#print "check res = {}".format(cell_size - (want_res % cell_size))
+		#print "check val = {}".format(0.001)
 		if(cell_size - (want_res % cell_size) <= 0.001):
 			res_offset = int(want_res/cell_size) + 1
 			print "grid resolution = {}".format(want_res)
 			print "grid offset = {}".format(res_offset)
 			cell_size = res_offset*cell_size
 			print "cell size is now {}".format(cell_size)
-
 		else:
 			print "wanted resolution not attainable"
 			res_offset = int(want_res/cell_size) + 1
@@ -58,10 +60,10 @@ def createGrid(event, want_res):
 		else:
 			rowsStar = int(rows/res_offset) + 1
 			colsStar = int(cols/res_offset) + 1
-		Xoffset = event.info.origin.position.x
-		Yoffset = event.info.origin.position.y
 		print "map rows = {}, map cols = {}".format(rows,cols)
 		print "grid rows = {}, grid cols = {}".format(rowsStar,colsStar)
+
+		print "X offset = {}, Y offset = {}".format(Xoffset,Yoffset)
 
 		grid = [[Node(0,0,50) for i in range(rows)] for j in range(cols)]
 		gridStar = [[Node(0,0,50) for a in range(rowsStar)] for b in range(colsStar)]
@@ -92,34 +94,45 @@ def createGrid(event, want_res):
 				offY = 0
 				obsCounter = 0
 				frontCounter = 0
+				openCounter = 0
 				saturation_val = int((res_offset**2)/4)
 				if(saturation_val == 0):
 					saturation_val = 1
-				while (offX < res_offset):
-					while(offY < res_offset):
-						if(grid[x][y].obstacle):
+				while (offX < res_offset and x+offX < cols):
+					while(offY < res_offset and y+offY < rows):
+						if(grid[x+offX][y+offY].obstacle):
 							obsCounter += 1
-						if(grid[x][y].frontier):
+						elif(grid[x+offX][y+offY].frontier):
 							frontCounter += 1
+						else:
+							openCounter += 1
 						offY += 1
 					offX += 1
 
 				xPos = int(x/res_offset)
 				yPos = int(y/res_offset)
 				#print "at offseted {},{}".format(xPos,yPos)
-
-				if(frontCounter >= 1):
+				if(frontCounter < 6):
+					#print "at offseted {},{}, front: {}, obs: {}, open: {}".format(xPos, yPos, frontCounter, obsCounter, openCounter)	
+					pass
+				if(frontCounter >= 1 and ((obsCounter >= 1) or (openCounter >= 1))): 
+					print "frontier at offseted {},{}, res: {}".format(xPos,yPos, cell_size)
 					gridStar[xPos][yPos] = Node(xPos, yPos, 50)
-					#print "frontier"
+					publishMap_front(xPos,yPos)
+					map_front_list.append(gridStar[xPos][yPos])
+					time.sleep(.005)
 				elif(obsCounter >= saturation_val):
 					gridStar[xPos][yPos] = Node(xPos, yPos, 100)
-					#print "obstacle"
+					print "obstacle at offseted {},{}".format(xPos,yPos)
 					publishBlockedCell(xPos,yPos)
 					obstacle_cell_list.append(gridStar[xPos][yPos])
 					time.sleep(.005)
-				else:
+				elif(openCounter >= saturation_val):
 					gridStar[xPos][yPos] = Node(xPos, yPos, 0)
-					#print "open"
+					print "open at offseted {},{}".format(xPos,yPos)
+				else:
+					gridStar[xPos][yPos] = Node(xPos, yPos, -1)
+					#print "unknown at offseted {},{}".format(xPos,yPos)
 
 				y += res_offset
 			y = 0
@@ -157,10 +170,6 @@ def createGrid(event, want_res):
 						gridStar[i-1][j].padding = True
 						time.sleep(.005)
 
-				if(gridStar[i][j].frontier == True):
-					map_front_list.append(gridStar[i][j])
-					publishMap_front(gridStar[i][j].x, gridStar[i][j].y)
-					time.sleep(.005)
 
 				j += 1
 			j = 0
@@ -211,9 +220,9 @@ def updateStart(msg):
 		print start.x
 		print start.y
 
-		#start = grid[int((start.x - Xoffset) / cell_size)][int((start.y - Yoffset) / cell_size)]
+		start = grid[int((start.x - Xoffset) / cell_size)][int((start.y - Yoffset) / cell_size)]
 
-		start = grid[int(Xoffset / -cell_size)][int(Yoffset / -cell_size)]
+		#start = grid[int(Xoffset / -cell_size)][int(Yoffset / -cell_size)]
 		print ("start(updateStart) = {},{}" .format(start.x,start.y))
 
 		complete = False
@@ -351,10 +360,7 @@ def AStar(initial, end):
 				a += 1
 
 			#update the sets
-			#print "rem notVisited"
-			#print notVisited
-			#print ""
-			#print current
+
 			notVisited.remove(current)
 			visited.append(current)
 			current.visited = True
@@ -367,10 +373,7 @@ def AStar(initial, end):
 
 		#else if children is empty go back 
 		else:
-			#print "remove"
-			#print notVisited
-			#print ""
-			#print current
+
 			notVisited.remove(current)
 			visited.append(current)
 			current.visited = True
@@ -422,7 +425,7 @@ def reconstruct_path(step):
 
 	if(step.parent):
 		path.append(step.parent)
-		reconstruct_path(step.parent)
+		reconstruct_path(stepparent)
 	elif(not step.parent):
 		publishPath(path)
 		wayPoints(path)
@@ -633,9 +636,9 @@ def publishFrontierCell(x, y):
 	msg.cell_width = grid_width
 	msg.cell_height = grid_height
 
-	msg.header = header
-	msg.cell_width = grid_width
-	msg.cell_height = grid_height
+	point = Point()
+	point.x = (x * cell_size) + Xoffset + (cell_size/2)
+	point.y = (y * cell_size) + Yoffset + (cell_size/2)
 
 	frontier_cell_list.append(point)
 	msg.cells = frontier_cell_list
@@ -652,12 +655,9 @@ def publishMap_front(x, y):
 	msg = GridCells()
 	grid_height = cell_size
 	grid_width = cell_size
+
 	header = Header()
 	header.frame_id = "map"
-
-	msg.header = header
-	msg.cell_width = grid_width
-	msg.cell_height = grid_height
 
 	msg.header = header
 	msg.cell_width = grid_width
@@ -682,15 +682,17 @@ def nearest_front(msg):
 
 	curX = msg.x
 	curY = msg.y
-	closest = map_frontier_list[0]
 
-	i = 0
-	while(i < len(map_frontier_list) ):
-		if((closest.x < map_frontier_list[i].x) or (closest.y < map_frontier_list[i].y)):
-			closest = map_frontier_list[i]
+	if (map_frontier_list):
+		closest = map_frontier_list[0]
 
-	#creates a new restar using the closest as new goal
-	reStar_goal(closest)
+		i = 0
+		while(i < len(map_frontier_list) ):
+			if((closest.x < map_frontier_list[i].x) or (closest.y < map_frontier_list[i].y)):
+				closest = map_frontier_list[i]
+
+		#creates a new restar using the closest as new goal
+		reStar_goal(closest)
 
 
 
@@ -807,7 +809,7 @@ if __name__ == '__main__':
 	pad_pub = rospy.Publisher('/padding', GridCells, queue_size = 25)
 	visited_pub = rospy.Publisher('/visited', GridCells, queue_size = 10)
 	block_pub = rospy.Publisher('/blocked', GridCells, queue_size = 10)
-	frontier_pub = rospy.Publisher('/frontier', GridCells, queue_size = 10) #search frontier
+	frontier_pub = rospy.Publisher('/frontier', GridCells, queue_size = 10) #search frontier (for A*)
 	map_front_pub = rospy.Publisher('/map_front', GridCells, queue_size = 10) # the frontiers on the map
 	path_pub = rospy.Publisher('/path', GridCells, queue_size = 10)
 	waypoint_pub = rospy.Publisher('/waypoints', Waypoint, queue_size = 1)
@@ -821,14 +823,14 @@ if __name__ == '__main__':
 	#uncomment line below if want to tell start position from RVIZ
 	#start_sub = rospy.Subscriber('/initialpose', PoseWithCovarianceStamped, updateStart)
 
-	#we probably need a new subscriber for it to work with a new waypoint
+	
 	reStar_sub = rospy.Subscriber('/re_path_waypoint', Point, reStar_start)
 	nearest_front_sub = rospy.Subscriber('/newPoint', Point, nearest_front)
 
-	
+	#print "start {},{}".format(start.x,start.y)
 	print "Lab 3 Started"
 	while(1 and not rospy.is_shutdown()):
-		
+		#print "start {},{}".format(start.x,start.y)
 		while(not complete and hasStart and hasGoal):
 			print "start {},{}".format(start.x,start.y)
 			AStar(start, goal)
