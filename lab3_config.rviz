@@ -40,8 +40,8 @@ Visualization Manager:
       Name: Grid
       Normal Cell Count: 0
       Offset:
-        X: -1
-        Y: -13.8
+        X: -12.2
+        Y: -12.2
         Z: 0
       Plane: XY
       Plane Cell Count: 10
@@ -243,6 +243,9 @@ Visualization Manager:
       Class: rviz/Path
       Color: 255; 85; 255
       Enabled: true
+      Head Diameter: 0.3
+      Head Length: 0.2
+      Length: 0.3
       Line Style: Lines
       Line Width: 0.03
       Name: Path
@@ -250,6 +253,10 @@ Visualization Manager:
         X: 0
         Y: 0
         Z: 0
+      Pose Style: None
+      Radius: 0.03
+      Shaft Diameter: 0.1
+      Shaft Length: 0.1
       Topic: ""
       Unreliable: false
       Value: true
@@ -305,6 +312,13 @@ Visualization Manager:
       Name: Map Frontier
       Topic: /map_front
       Value: true
+    - Alpha: 1
+      Class: rviz/GridCells
+      Color: 255; 0; 255
+      Enabled: true
+      Name: Unreachable
+      Topic: /bad_map_front
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
@@ -329,7 +343,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 38.4135
+      Distance: 12.2017
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.06
         Stereo Focal Distance: 1
@@ -341,10 +355,10 @@ Visualization Manager:
         Z: 1.69815
       Name: Current View
       Near Clip Distance: 0.01
-      Pitch: 0.729801
+      Pitch: 1.1248
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz)
-      Yaw: 1.1054
+      Yaw: 1.6054
     Saved: ~
 Window Geometry:
   Displays:
@@ -362,5 +376,5 @@ Window Geometry:
   Views:
     collapsed: true
   Width: 1301
-  X: 637
-  Y: 40
+  X: 307
+  Y: 24

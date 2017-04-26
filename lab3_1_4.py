@@ -9,7 +9,7 @@ from geometry_msgs.msg import PoseStamped, Pose, Point, PointStamped, PoseWithCo
 from tf.transformations import euler_from_quaternion
 from Node import Node
 import time
-from final_lab.msg import Waypoint
+from rpcole_lab2.msg import Waypoint
 
 #creates a background grid of Nodes for us to access based upon the map OccupancyCells
 def createGrid(event, want_res):
@@ -18,6 +18,7 @@ def createGrid(event, want_res):
 	global cell_size
 	global hasMap
 	global rows, cols
+	global rowsStar, colsStar
 	global Xoffset
 	global Yoffset
 	global obstacle_cell_list
@@ -108,28 +109,27 @@ def createGrid(event, want_res):
 							openCounter += 1
 						offY += 1
 					offX += 1
+					offY = 0
 
 				xPos = int(x/res_offset)
 				yPos = int(y/res_offset)
 				#print "at offseted {},{}".format(xPos,yPos)
-				if(frontCounter < 6):
+				if(frontCounter < 36):
 					#print "at offseted {},{}, front: {}, obs: {}, open: {}".format(xPos, yPos, frontCounter, obsCounter, openCounter)	
 					pass
-				if(frontCounter >= 1 and ((obsCounter >= 1) or (openCounter >= 1))): 
-					print "frontier at offseted {},{}, res: {}".format(xPos,yPos, cell_size)
+				if(frontCounter >= 1 and ((obsCounter > 0) or (openCounter > 0))): 
+					#print "frontier at offseted {},{}, res: {}".format(xPos,yPos, cell_size)
 					gridStar[xPos][yPos] = Node(xPos, yPos, 50)
-					publishMap_front(xPos,yPos)
 					map_front_list.append(gridStar[xPos][yPos])
-					time.sleep(.005)
 				elif(obsCounter >= saturation_val):
 					gridStar[xPos][yPos] = Node(xPos, yPos, 100)
-					print "obstacle at offseted {},{}".format(xPos,yPos)
+					#print "obstacle at offseted {},{}".format(xPos,yPos)
 					publishBlockedCell(xPos,yPos)
 					obstacle_cell_list.append(gridStar[xPos][yPos])
 					time.sleep(.005)
 				elif(openCounter >= saturation_val):
 					gridStar[xPos][yPos] = Node(xPos, yPos, 0)
-					print "open at offseted {},{}".format(xPos,yPos)
+					#print "open at offseted {},{}".format(xPos,yPos)
 				else:
 					gridStar[xPos][yPos] = Node(xPos, yPos, -1)
 					#print "unknown at offseted {},{}".format(xPos,yPos)
@@ -175,9 +175,18 @@ def createGrid(event, want_res):
 			j = 0
 			i += 1
 		
-		# TODO look at if this still works with gridStar
 		start = gridStar[int(Xoffset / -want_res)][int(Yoffset / -want_res)]
 		print ("start(createGrid) = {},{}" .format(start.x,start.y))
+
+		z = len(map_front_list) - 1
+		while(z >= 0):
+			if(not testAStar(start,map_front_list[z])):
+				map_front_list.remove(map_front_list[z])
+				time.sleep(.005)
+			else:
+				publishMap_front(map_front_list[z].x,map_front_list[z].y)
+				time.sleep(.005)
+			z -= 1
 
 		print "map loaded"
 		hasMap = True
@@ -187,7 +196,7 @@ def updateGoal(msg):
 	global goal
 	global start
 	global complete
-	global grid
+	global gridStar
 	global hasGoal
 	global cell_size
 	global Xoffset
@@ -199,7 +208,7 @@ def updateGoal(msg):
 		print goal.x
 		print goal.y
 
-		goal = grid[int((goal.x - Xoffset) / cell_size)][int((goal.y - Yoffset) / cell_size)]
+		goal = gridStar[int((goal.x - Xoffset) / cell_size)][int((goal.y - Yoffset) / cell_size)]
 		complete = False
 		print ("goalX = %d, goalY = %d" % (goal.x, goal.y))
 		hasGoal = True
@@ -208,7 +217,7 @@ def updateGoal(msg):
 def updateStart(msg):
 	global start
 	global complete
-	global grid
+	global gridStar
 	global hasStart
 	global cell_size
 	global Xoffset
@@ -220,9 +229,9 @@ def updateStart(msg):
 		print start.x
 		print start.y
 
-		start = grid[int((start.x - Xoffset) / cell_size)][int((start.y - Yoffset) / cell_size)]
+		start = gridStar[int((start.x - Xoffset) / cell_size)][int((start.y - Yoffset) / cell_size)]
 
-		#start = grid[int(Xoffset / -cell_size)][int(Yoffset / -cell_size)]
+		#start = gridStar[int(Xoffset / -cell_size)][int(Yoffset / -cell_size)]
 		print ("start(updateStart) = {},{}" .format(start.x,start.y))
 
 		complete = False
@@ -231,34 +240,34 @@ def updateStart(msg):
 
 #reAstars with a new starting point || takes a new start node or message
 def reStar_start(msg):
-	global grid
+	global gridStar
 	global goal
 	global cell_size
 	global start
 
-	start = grid[int((msg.x / -cell_size))][int((msg.y / -cell_size) )]
+	start = gridStar[int((msg.x / -cell_size))][int((msg.y / -cell_size) )]
 
 	AStar(start, goal)
 
 #reAstars with new goal || takes a new goal node or message
 def reStar_goal(msg):
-	global grid
+	global gridStar
 	global goal
 	global cell_size
 
-	goal = grid[int((msg.x/ -cell_size))][int((msg.y / -cell_size))]
+	goal = gridStar[int((msg.x/ -cell_size))][int((msg.y / -cell_size))]
 
 	AStar(start, goal)
 
 # function that runs the A* algorithm and publishes the proper path it's waypoints
 def AStar(initial, end):
-	global grid, complete
+	global gridStar, complete
 	global start, goal
-	global rows, cols
+	global rowsStar, colsStar
 	global path
 	global cell_size
 
-	print "start {},{}".format(start.x,start.y)
+	print "start {},{}".format(initial.x,initial.y)
 
 	print "Astar Running"
 
@@ -275,7 +284,7 @@ def AStar(initial, end):
 
 		i = 0
 		children = []
-		current.calcCosts(start,goal)
+		current.calcCosts(initial,end)
 
 		#print "current {}, {}".format(current.x,current.y)
 
@@ -304,18 +313,18 @@ def AStar(initial, end):
 			return
 
 		# find the children
-		if (current.x + 1 < cols):
+		if (current.x + 1 < colsStar):
 			#print "left child exists {},{}".format(current.x+1,current.y)
-			children.append(grid[int(current.x+1)][int(current.y)])
-		if (current.y + 1 < rows):
+			children.append(gridStar[int(current.x+1)][int(current.y)])
+		if (current.y + 1 < rowsStar):
 			#print "bottom child exists {},{}".format(current.x,current.y+1)
-			children.append(grid[int(current.x)][int(current.y+1)])
+			children.append(gridStar[int(current.x)][int(current.y+1)])
 		if (current.x - 1 > 0):
 			#print "right child exists {},{}".format(current.x-1,current.y)
-			children.append(grid[int(current.x-1)][int(current.y)])
+			children.append(gridStar[int(current.x-1)][int(current.y)])
 		if (current.y - 1 > 0):
 			#print "top child exists {},{}".format(current.x,current.y-1)
-			children.append(grid[int(current.x)][int(current.y-1)])
+			children.append(gridStar[int(current.x)][int(current.y-1)])
 
 		#print ""
 		#print "check children"
@@ -335,6 +344,9 @@ def AStar(initial, end):
 			elif(children[k].inNotVisited):
 				#print "children remove frontier {}, {}".format(children[k].x,children[k].y)
 				children.remove(children[k])
+			elif(children[k].frontier and not children[k] == end):
+				#print "children remove frontier {}, {}".format(children[k].x,children[k].y)
+				children.remove(children[k])
 			else:
 				pass
 				#print "good children {}, {}".format(children[k].x,children[k].y)
@@ -346,7 +358,7 @@ def AStar(initial, end):
 		if(children):
 			for Node in children:
 				Node.parent = current
-				Node.calcCosts(start, goal)
+				Node.calcCosts(initial, end)
 				#print "child {}, {} Gcosts {}, Hcosts {}, Fcosts {}".format(Node.x,Node.y,Node.gCost,Node.hCost,Node.fCost)
 		
 			#place remaining children into notVisited nodes and publish them as Frontier
@@ -395,6 +407,163 @@ def AStar(initial, end):
 	#TODO add thing that publishes message saying A* failed
 
 	return
+
+# function that runs the A* algorithm to see if a cell can be reached
+def testAStar(initial, end):
+	global gridStar, complete
+	global start, goal
+	global rowsStar, colsStar
+	global path
+	global cell_size
+
+	print "start {},{}".format(initial.x,initial.y)
+	print "goal {},{}".format(end.x,end.y)
+
+	print "Astar Running"
+
+	notVisited = [] #nodes you havent been to
+	visited = [] #nodes that youve been to
+	children = []
+	path = []
+
+	#set the first current
+	current = initial 
+	notVisited.append(initial)
+
+	while (notVisited and not rospy.is_shutdown()):
+
+		i = 0
+		children = []
+		current.calcCosts(initial,end)
+
+		#print "current {}, {}".format(current.x,current.y)
+
+		#check if goal reached
+		if (current == end):
+			print "Great Success!!!"
+			#reconstruct_path not written
+			complete = True
+			path.append(goal)
+
+			#reset all visited attributes for next run
+			k = len(visited) - 1
+			while(k >= 0):
+				visited[k].visited = False
+				visited[k].inNotVisited = False
+				k -= 1
+
+			j = len(notVisited) - 1
+			while(j >= 0):
+				notVisited[j].visited = False
+				notVisited[j].inNotVisited = False
+				j -= 1
+
+			return True
+
+		# find the children
+		if (current.x + 1 < colsStar):
+			#print "left child exists {},{}".format(current.x+1,current.y)
+			children.append(gridStar[int(current.x+1)][int(current.y)])
+		if (current.y + 1 < rowsStar):
+			#print "bottom child exists {},{}".format(current.x,current.y+1)
+			children.append(gridStar[int(current.x)][int(current.y+1)])
+		if (current.x - 1 > 0):
+			#print "right child exists {},{}".format(current.x-1,current.y)
+			children.append(gridStar[int(current.x-1)][int(current.y)])
+		if (current.y - 1 > 0):
+			#print "top child exists {},{}".format(current.x,current.y-1)
+			children.append(gridStar[int(current.x)][int(current.y-1)])
+
+		#print ""
+		#print "check children"
+
+		#check if children have been visited or not or if its an obstacle
+		k = len(children)-1
+		while(k >= 0):
+			if(children[k].visited):
+				#print "children remove visited {}, {}".format(children[k].x,children[k].y)
+				children.remove(children[k])
+			elif(children[k].obstacle):
+				#print "children remove obstacle {}, {}".format(children[k].x,children[k].y)
+				children.remove(children[k])
+			elif(children[k].padding):
+				#print "children remove padding {}, {}".format(children[k].x,children[k].y)
+				children.remove(children[k])
+			elif(children[k].inNotVisited):
+				#print "children remove notVisited {}, {}".format(children[k].x,children[k].y)
+				children.remove(children[k])
+			elif(children[k].frontier and not children[k] == end):
+				#print "children remove frontier {}, {}".format(children[k].x,children[k].y)
+				children.remove(children[k])
+			else:
+				pass
+				#print "good children {}, {}".format(children[k].x,children[k].y)
+			k -= 1
+
+		#print "children done"
+		#print ""
+
+		if(children):
+			for Node in children:
+				Node.parent = current
+				Node.calcCosts(initial, end)
+				#print "child {}, {} Gcosts {}, Hcosts {}, Fcosts {}".format(Node.x,Node.y,Node.gCost,Node.hCost,Node.fCost)
+		
+			#place remaining children into notVisited nodes and publish them as Frontier
+			a = 0
+			while(a < len(children)):
+				#print "add {}, {}".format(children[a].x, children[a].y)
+				heapPushfCost(notVisited, children[a])
+				children[a].inNotVisited = True
+				#print "append {}, {}".format(children[a].x, children[a].y)
+				#publishFrontierCell(children[a].x, children[a].y)
+				a += 1
+
+			#update the sets
+
+			notVisited.remove(current)
+			visited.append(current)
+			current.visited = True
+			#publishVisitedCell(current.x, current.y)
+
+			#pull first in list because has lowest cost
+			successor = notVisited[0]
+
+			current = successor
+
+		#else if children is empty go back 
+		else:
+			notVisited.remove(current)
+			visited.append(current)
+			current.visited = True
+			#publishVisitedCell(current.x, current.y)
+			
+			#pull first in list because has lowest cost
+			if(notVisited):
+				successor = notVisited[0]
+				current = successor
+
+		#print "{}".format(len(notVisited))	
+
+	#failed to find the goal
+	print "AStar Failed"
+	complete = True
+	publishBad_Map_front(end.x,end.y)
+
+	#reset all visited attributes for next run
+	k = len(visited) - 1
+	while(k >= 0):
+		visited[k].visited = False
+		visited[k].inNotVisited = False
+		k -= 1
+
+	j = len(notVisited) - 1
+	while(j >= 0):
+		notVisited[j].visited = False
+		notVisited[j].inNotVisited = False
+		j -= 1
+
+	return False
 
 # this function adds the item to the uselist based upon the fCost of the item (item must be a Node)
 def heapPushfCost(uselist, item):
@@ -502,7 +671,7 @@ def wayPoints(steps):
 
 def newCost(msg):
 
-	global grid
+	global gridStar
 
 	newRows = msg.info.height
 	newCols = msg.info.width
@@ -514,7 +683,7 @@ def newCost(msg):
 	while (x < newCols):
 		while (y < newRows):
 			#asign a node to each grid item of node (x, y, wallchance)
-			costMap[x][y] = Node(x, y, msg.data[x+(y*cols)])
+			costMap[x][y] = Node(x, y, msg.data[x+(y*newCols)])
 			#print "{} {}".format(x,y)
 			y += 1
 		y = 0
@@ -524,11 +693,11 @@ def newCost(msg):
 	y=0
 	while (x < newCols):
 		while (y < newRows):
-			if(not grid[x][y].padding):			
-				if (costMap[x][y].obstacle and (not grid[x][y].obstacle)):
-					gird[x][y].obstacle = True
-				elif((not costMap[x][y].obstacle) and grid[x][y].obstacle):
-					grid[x][y].obstacle = False
+			if(not gridStar[x][y].padding):			
+				if (costMap[x][y].obstacle and (not gridStar[x][y].obstacle)):
+					gridStar[x][y].obstacle = True
+				elif((not costMap[x][y].obstacle) and gridStar[x][y].obstacle):
+					gridStar[x][y].obstacle = False
 		y = 0
 		x += 1
 	
@@ -671,6 +840,32 @@ def publishMap_front(x, y):
 	msg.cells = map_frontier_list
 	map_front_pub.publish(msg) 
 
+# publishes a Map Frontier Cell centered at choords (x,y)
+def publishBad_Map_front(x, y):
+	global bad_map_front_pub
+	global bad_map_frontier_list
+	global cell_size
+	global Xoffset
+	global Yoffset
+
+	msg = GridCells()
+	grid_height = cell_size
+	grid_width = cell_size
+
+	header = Header()
+	header.frame_id = "map"
+
+	msg.header = header
+	msg.cell_width = grid_width
+	msg.cell_height = grid_height
+
+	point = Point()
+	point.x = (x * cell_size) + Xoffset + (cell_size/2)
+	point.y = (y * cell_size) + Yoffset + (cell_size/2)
+
+	bad_map_frontier_list.append(point)
+	msg.cells = bad_map_frontier_list
+	bad_map_front_pub.publish(msg) 
 
 #findsthe nearest frontier cell on the map to the robots current position on the map and then reStars to it
 def nearest_front(msg):
@@ -693,8 +888,6 @@ def nearest_front(msg):
 
 		#creates a new restar using the closest as new goal
 		reStar_goal(closest)
-
-
 
 # publishes a Path Cell centered at choords (x,y)
 def publishPathCell(x, y):
@@ -748,12 +941,11 @@ def odomCallback(event):
     pose.pose.orientation.z = yaw
     theta = math.degrees(yaw)
 
-
 if __name__ == '__main__':
 
 	rospy.init_node('Mag_Men_Astar')
 
-	global visited_pub, block_pub, frontier_pub, unknown_pub, path_pub, pad_pub, map_front_pub
+	global visited_pub, block_pub, frontier_pub, unknown_pub, path_pub, pad_pub, map_front_pub, bad_map_front_pub
 	global pose 
 	global odom_tf
 	global frontier_cell_list #for storing points
@@ -765,12 +957,14 @@ if __name__ == '__main__':
 	global pad_cell_list #for storing nodes
 	global obstacle_cell_list #for storing nodes
 	global padding_cell_list #for storing points
+	global bad_map_frontier_list #for storing points
 	global goal
 	global start
 	global complete
 	global cell_size
 	global hasMap
 	global rows, cols
+	global rowsStar, colsStar
 	global Xoffset
 	global Yoffset
 	global hasStart
@@ -779,7 +973,7 @@ if __name__ == '__main__':
 	global grid 
 	global gridStar
 
-	wanted_resolution = 0.3 #resolution wanted for the map
+	wanted_resolution = 0.15 #resolution wanted for the map
 
 	#initialize variables
 	visited_cell_list = []
@@ -791,6 +985,7 @@ if __name__ == '__main__':
 	pad_cell_list = []
 	obstacle_cell_list = []
 	padding_cell_list = []
+	bad_map_frontier_list = []
 	pose = PoseStamped()
 	cell_size = 0.05 #this is the default value for gMapping cell size
 	goal = Node(0,0,0)
@@ -803,17 +998,20 @@ if __name__ == '__main__':
 	hasStart = True
 	rows = 0
 	cols = 0
+	rowsStar = 0
+	colsStar = 0
 	tolerance = .01 #used for comparing floats
 
 	#initialize publishers
 	pad_pub = rospy.Publisher('/padding', GridCells, queue_size = 25)
-	visited_pub = rospy.Publisher('/visited', GridCells, queue_size = 10)
-	block_pub = rospy.Publisher('/blocked', GridCells, queue_size = 10)
-	frontier_pub = rospy.Publisher('/frontier', GridCells, queue_size = 10) #search frontier (for A*)
-	map_front_pub = rospy.Publisher('/map_front', GridCells, queue_size = 10) # the frontiers on the map
-	path_pub = rospy.Publisher('/path', GridCells, queue_size = 10)
+	visited_pub = rospy.Publisher('/visited', GridCells, queue_size = 20)
+	block_pub = rospy.Publisher('/blocked', GridCells, queue_size = 20)
+	frontier_pub = rospy.Publisher('/frontier', GridCells, queue_size = 20) #search frontier (for A*)
+	map_front_pub = rospy.Publisher('/map_front', GridCells, queue_size = 20) # the frontiers on the map
+	path_pub = rospy.Publisher('/path', GridCells, queue_size = 15)
 	waypoint_pub = rospy.Publisher('/waypoints', Waypoint, queue_size = 1)
 	stop_pub = rospy.Publisher('/STOP' , Twist, queue_size = 1)
+	bad_map_front_pub = rospy.Publisher('/bad_map_front', GridCells, queue_size = 20) # the frontiers that can't be reached on the map
 
 
 	#initialize subscribers
