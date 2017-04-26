@@ -26,6 +26,8 @@ def createGrid(event, want_res):
 	global map_front_list
 
 	if(not hasMap):
+		hasMap = True
+
 		x = 0 
 		y = 0 
 
@@ -66,8 +68,8 @@ def createGrid(event, want_res):
 
 		print "X offset = {}, Y offset = {}".format(Xoffset,Yoffset)
 
-		grid = [[Node(0,0,50) for i in range(rows)] for j in range(cols)]
-		gridStar = [[Node(0,0,50) for a in range(rowsStar)] for b in range(colsStar)]
+		grid = [[Node(0,0,50,cell_size) for i in range(rows)] for j in range(cols)]
+		gridStar = [[Node(0,0,50,cell_size) for a in range(rowsStar)] for b in range(colsStar)]
 
 		#print " map rows = {} map cols = {}".format(len(grid),len(grid[0]))
 		#print " gridStar rows = {} gridStar cols = {}".format(len(gridStar),len(gridStar[0]))
@@ -78,7 +80,7 @@ def createGrid(event, want_res):
 		while(x < cols):
 			while(y < rows):
 				#assign a node to each grid cell
-				grid[x][y] = Node(x,y, event.data[x+(y*cols)])
+				grid[x][y] = Node(x,y, event.data[x+(y*cols)],cell_size)
 				#print "{}. {}".format(x,y)
 				y += 1
 			y = 0
@@ -119,19 +121,19 @@ def createGrid(event, want_res):
 					pass
 				if(frontCounter >= 1 and ((obsCounter > 0) or (openCounter > 0))): 
 					#print "frontier at offseted {},{}, res: {}".format(xPos,yPos, cell_size)
-					gridStar[xPos][yPos] = Node(xPos, yPos, 50)
+					gridStar[xPos][yPos] = Node(xPos, yPos, 50, cell_size)
 					map_front_list.append(gridStar[xPos][yPos])
 				elif(obsCounter >= saturation_val):
-					gridStar[xPos][yPos] = Node(xPos, yPos, 100)
+					gridStar[xPos][yPos] = Node(xPos, yPos, 100, cell_size)
 					#print "obstacle at offseted {},{}".format(xPos,yPos)
 					publishBlockedCell(xPos,yPos)
 					obstacle_cell_list.append(gridStar[xPos][yPos])
 					time.sleep(.005)
 				elif(openCounter >= saturation_val):
-					gridStar[xPos][yPos] = Node(xPos, yPos, 0)
+					gridStar[xPos][yPos] = Node(xPos, yPos, 0, cell_size)
 					#print "open at offseted {},{}".format(xPos,yPos)
 				else:
-					gridStar[xPos][yPos] = Node(xPos, yPos, -1)
+					gridStar[xPos][yPos] = Node(xPos, yPos, -1, cell_size)
 					#print "unknown at offseted {},{}".format(xPos,yPos)
 
 				y += res_offset
@@ -189,7 +191,9 @@ def createGrid(event, want_res):
 			z -= 1
 
 		print "map loaded"
-		hasMap = True
+		print "finding nearest waypoint"
+		nearest_front()
+
 
 # updates the goal cell of the TurtleBot for use in A* (does not care about orientation) (callback for /clicked_point)
 def updateGoal(msg):
@@ -223,41 +227,43 @@ def updateStart(msg):
 	global Xoffset
 	global Yoffset
 
-	if (complete or hasStart):
-		start.x = msg.pose.pose.position.x
-		start.y = msg.pose.pose.position.y
-		print start.x
-		print start.y
+	start.x = msg.pose.pose.position.x
+	start.y = msg.pose.pose.position.y
+	print start.x
+	print start.y
 
-		start = gridStar[int((start.x - Xoffset) / cell_size)][int((start.y - Yoffset) / cell_size)]
+	start = gridStar[int((start.x - Xoffset) / cell_size)][int((start.y - Yoffset) / cell_size)]
 
 		#start = gridStar[int(Xoffset / -cell_size)][int(Yoffset / -cell_size)]
-		print ("start(updateStart) = {},{}" .format(start.x,start.y))
+	print ("start(updateStart) = {},{}" .format(start.x,start.y))
 
-		complete = False
-		print ("StartX = %d, StartY = %d" % (start.x, start.y))
-		hasStart = True
+	complete = False
+	print ("StartX = %d, StartY = %d" % (start.x, start.y))
+	hasStart = True
 
-#reAstars with a new starting point || takes a new start node or message
-def reStar_start(msg):
-	global gridStar
-	global goal
-	global cell_size
+# updates the starting cell of the TurtleBot for use in finding frontiers. It forces an update reformation of gridStart on the next /map message
+# (callback from /newLocation)
+def updateStart_ReMap(msg):
 	global start
-
-	start = gridStar[int((msg.x / -cell_size))][int((msg.y / -cell_size) )]
-
-	AStar(start, goal)
-
-#reAstars with new goal || takes a new goal node or message
-def reStar_goal(msg):
+	global complete
 	global gridStar
-	global goal
+	global hasStart
 	global cell_size
+	global Xoffset
+	global Yoffset
 
-	goal = gridStar[int((msg.x/ -cell_size))][int((msg.y / -cell_size))]
+	start.x = msg.pose.pose.position.x
+	start.y = msg.pose.pose.position.y
+	print start.x
+	print start.y
 
-	AStar(start, goal)
+	start = gridStar[int((start.x - Xoffset) / cell_size)][int((start.y - Yoffset) / cell_size)]
+
+		#start = gridStar[int(Xoffset / -cell_size)][int(Yoffset / -cell_size)]
+	print ("start updated to = {},{}" .format(start.x,start.y))
+
+	hasStart = True
+	hasMap = False
 
 # function that runs the A* algorithm and publishes the proper path it's waypoints
 def AStar(initial, end):
@@ -672,18 +678,19 @@ def wayPoints(steps):
 def newCost(msg):
 
 	global gridStar
+	global cell_size
 
 	newRows = msg.info.height
 	newCols = msg.info.width
 
-	costMap = [[Node(0,0,50) for i in range(newRows)] for j in range(newCols)]
+	costMap = [[Node(0,0,50,cell_size) for i in range(newRows)] for j in range(newCols)]
 
 	x=0
 	y=0
 	while (x < newCols):
 		while (y < newRows):
 			#asign a node to each grid item of node (x, y, wallchance)
-			costMap[x][y] = Node(x, y, msg.data[x+(y*newCols)])
+			costMap[x][y] = Node(x, y, msg.data[x+(y*newCols)], cell_size)
 			#print "{} {}".format(x,y)
 			y += 1
 		y = 0
@@ -868,26 +875,39 @@ def publishBad_Map_front(x, y):
 	bad_map_front_pub.publish(msg) 
 
 #findsthe nearest frontier cell on the map to the robots current position on the map and then reStars to it
-def nearest_front(msg):
-	global gridStar
+def nearest_front():
 	global Xoffset
 	global Yoffset
+	global start
 	global cell_size
-	global map_frontier_list
+	global map_front_list
+	global hasMap
+	global hasStart
 
-	curX = msg.x
-	curY = msg.y
+	
+	#finds the closest frontier or if none, means we are done
+	while((not (hasMap and hasStart)):
+		print "waiting for map or start"
 
-	if (map_frontier_list):
-		closest = map_frontier_list[0]
+	if (map_front_list):
+			print "finding path to closest frontier cell"
 
-		i = 0
-		while(i < len(map_frontier_list) ):
-			if((closest.x < map_frontier_list[i].x) or (closest.y < map_frontier_list[i].y)):
-				closest = map_frontier_list[i]
+			closest = map_front_list[0]
 
-		#creates a new restar using the closest as new goal
-		reStar_goal(closest)
+			i = 1
+			while(i < len(map_front_list)):
+				cur_dist = math.sqrt((((closest.x - curX) * cell_size) ** 2) + (((closest.y - curY) * cell_size) ** 2))
+				new_dist = math.sqrt((((map_front_list[i].x - curX) * cell_size) ** 2) + (((map_front_list[i].x - curY) * cell_size) ** 2))
+				if(new_dist < cur_dist)):
+					closest = map_front_list[i]
+				i += 1
+			goal = closest
+
+			Astar(start,goal)
+		else: #nothing in frontier so we're done!
+			print "Search complete!!!!"
+			msg = Twist()
+			stop_pub.publish(msg)
 
 # publishes a Path Cell centered at choords (x,y)
 def publishPathCell(x, y):
@@ -945,7 +965,7 @@ if __name__ == '__main__':
 
 	rospy.init_node('Mag_Men_Astar')
 
-	global visited_pub, block_pub, frontier_pub, unknown_pub, path_pub, pad_pub, map_front_pub, bad_map_front_pub
+	global visited_pub, block_pub, frontier_pub, unknown_pub, path_pub, pad_pub, map_front_pub, bad_map_front_pub, rotation_pub
 	global pose 
 	global odom_tf
 	global frontier_cell_list #for storing points
@@ -988,7 +1008,7 @@ if __name__ == '__main__':
 	bad_map_frontier_list = []
 	pose = PoseStamped()
 	cell_size = 0.05 #this is the default value for gMapping cell size
-	goal = Node(0,0,0)
+	goal = Node(0,0,0,wanted_resolution)
 	complete = True
 	hasMap = False
 	hasGoal = False
@@ -1013,17 +1033,15 @@ if __name__ == '__main__':
 	stop_pub = rospy.Publisher('/STOP' , Twist, queue_size = 1)
 	bad_map_front_pub = rospy.Publisher('/bad_map_front', GridCells, queue_size = 20) # the frontiers that can't be reached on the map
 
-
 	#initialize subscribers
 	map_sub = rospy.Subscriber('/map', OccupancyGrid, createGrid, wanted_resolution)
 	roboMap_sub = rospy.Subscriber('/move_base/global_costmap/costmap', OccupancyGrid, newCost)
 	goal_sub = rospy.Subscriber('/clicked_point', PointStamped, updateGoal)
 	#uncomment line below if want to tell start position from RVIZ
 	#start_sub = rospy.Subscriber('/initialpose', PoseWithCovarianceStamped, updateStart)
-
 	
-	reStar_sub = rospy.Subscriber('/re_path_waypoint', Point, reStar_start)
-	nearest_front_sub = rospy.Subscriber('/newPoint', Point, nearest_front)
+	start_sub = rospy.Subscriber('/newPoint', Point, updateStart_ReMap)
+	findFront_sub = rospy.Subscriber('/findNextFront', Point, updateStart_ReMap)
 
 	#print "start {},{}".format(start.x,start.y)
 	print "Lab 3 Started"
