@@ -8,6 +8,7 @@ from nav_msgs.msg import Odometry
 from geometry_msgs.msg import PoseStamped, Pose, Point
 from tf.transformations import euler_from_quaternion
 from rpcole_lab2.msg import Waypoint
+import time
 
 
 #This function sequentially calls methods to perform a trajectory.
@@ -56,13 +57,14 @@ def driveStraight(speed, distance):
 		#print currentX
 		#print speed
 		currentDistance = math.sqrt(((currentX - initialx)**2) + ((currentY - initialy)**2))
-		print "distance traveled = {}".format(currentDistance)
 		publishTwist(speed,0)
+		rospy.sleep(rospy.Duration(.005, 0))
 		if (currentDistance >= distance):
 			atTarget = True
 
-
-	publishTwist(0,0)           
+	publishTwist(0,0) 
+	rospy.sleep(rospy.Duration(.005, 0))
+	print "distance traveled = {}".format(currentDistance)          
 	print "ARRIVED!"
 	#print "ok next"
 
@@ -93,35 +95,37 @@ def rotate(angle):
 	error = angle-theta
 	error2 = 720
 
-
 	##determine which way to turn based on angle
 
-	while((abs(error) >= 1) and not rospy.is_shutdown()): 
+	while((abs(error) >= 2) and not rospy.is_shutdown()): 
 
 		if (angle > originTheta):
-			vel = 0.35
+			vel = 0.3
 		elif (angle < originTheta):
-			vel = -0.35
+			vel = -0.3
 		#recalc error and publish twist to move turtlebot
 		publishTwist(0.0,vel)
+		rospy.sleep(rospy.Duration(.02, 0))
 		
 		#error 
 		error2 = error
 		error = angle-theta
 
-		print "theta = {}, error = {}".format(theta,error)
-		print ""
+		#print "theta = {}, error = {}".format(theta,error)
+		#print ""
 
 		# in case we are looking for 180 and -180 and overshoot
 		if (abs(abs(error2) - abs(error)) > 90):
 			print "range flip"
 			vel = 0
 			publishTwist(0.0, vel)
+			rospy.sleep(rospy.Duration(.02, 0))
 			error = 0
 
 	#rotation complete so stop movement
 	vel = 0
 	publishTwist(0.0,vel)
+	rospy.sleep(rospy.Duration(.02, 0))
 
 #navigates to a pose
 def navToPose(goal):
@@ -245,6 +249,38 @@ def sendLocation():
 
 	loc_pub.publish(newMsg)
 
+def sevenTwenty(msg):
+
+	sendMsg = Point()
+
+	print "rotate to 180"
+	rotate(180)
+	rospy.sleep(rospy.Duration(2, 0))
+	print "rotate to 0"
+	rotate(0)
+	rospy.sleep(rospy.Duration(2, 0))
+	print "rotate to -180"
+	rotate(-180)
+	rospy.sleep(rospy.Duration(2, 0))
+	#print "rotate to 0"
+	#rotate(0)
+	#print "rotate to 180"
+	#rotate(180)
+	print "need to update map"
+
+	rospy.sleep(rospy.Duration(3, 0))
+
+	sendMsg.x = xPosition
+	sendMsg.y = yPosition
+	print "SEVENTWENTY"
+
+	begin_pub.publish(sendMsg)
+
+	rospy.sleep(rospy.Duration(3, 0))
+
+	print "rotate to 0 to force update"
+	rotate(0)
+
 #drive to the second to last waypoint in the list, spins twice, then forces update of map
 def driveWaypoints(msg):
 	sendMsg = Point()
@@ -258,45 +294,75 @@ def driveWaypoints(msg):
 	a = 0
 
 	while ((a < len(msg.waypoints) - 2) and not rospy.is_shutdown()):   
-		if(msg.waypoints[a+1].x - msg.waypoints[a].x == 0):
+		if(abs(msg.waypoints[a+1].x - msg.waypoints[a].x) >= 0.001):
 			if(msg.waypoints[a].x > msg.waypoints[a+1].x):
 				print "rotate to +x"
-				rotate(90)
+				rotate(180)
 			elif(msg.waypoints[a].x < msg.waypoints[a+1].x):
 				print "rotate to -x"
-				rotate(180)
+				rotate(0)
+			print "drive1 = {}, drive2 = {}".format(msg.waypoints[a].x,msg.waypoints[a+1].x)
 			print "drive x {}".format(msg.waypoints[a].x-msg.waypoints[a+1].x)
 			driveStraight(0.25, msg.waypoints[a].x-msg.waypoints[a+1].x)
-		elif(msg.waypoints[a+1].y - msg.waypoints[a].y == 0):
+		elif(abs(msg.waypoints[a+1].y - msg.waypoints[a].y) >= 0.001):
 			if (msg.waypoints[a].y < msg.waypoints[a+1].y):
 				print "rotate to +y"
-				rotate(0)
+				rotate(90)
 			if (msg.waypoints[a].y > msg.waypoints[a+1].y):
 				print "rotate to -y"
-				rotate (-180) 
+				rotate (-90) 
+			print "drive1 = {}, drive2 = {}".format(msg.waypoints[a].y,msg.waypoints[a+1].y)
 			print "drive y {}".format(msg.waypoints[a].y-msg.waypoints[a+1].y)
 			driveStraight(0.25, msg.waypoints[a].y-msg.waypoints[a+1].y)
 		#sends the new location after it drives to the waypoint
 		a += 1
+	#if the message list is only two, drive half the distance to the final position
+	if(len(msg.waypoints) == 2):
+		if(abs(msg.waypoints[a+1].x - msg.waypoints[a].x) >= 0.001):
+			if(msg.waypoints[a].x > msg.waypoints[a+1].x):
+				print "rotate to +x"
+				rotate(180)
+			elif(msg.waypoints[a].x < msg.waypoints[a+1].x):
+				print "rotate to -x"
+				rotate(0)
+			print "drive1 = {}, drive2 = {}".format(msg.waypoints[a].x,msg.waypoints[a+1].x)
+			print "drive x {}".format((msg.waypoints[a].x-msg.waypoints[a+1].x)/2)
+			driveStraight(0.25, (msg.waypoints[a].x-msg.waypoints[a+1].x)/2)
+		elif(abs(msg.waypoints[a+1].y - msg.waypoints[a].y) >= 0.001):
+			if (msg.waypoints[a].y < msg.waypoints[a+1].y):
+				print "rotate to +y"
+				rotate(90)
+			if (msg.waypoints[a].y > msg.waypoints[a+1].y):
+				print "rotate to -y"
+				rotate (-90) 
+			print "drive1 = {}, drive2 = {}".format(msg.waypoints[a].y,msg.waypoints[a+1].y)
+			print "drive y {}".format((msg.waypoints[a].y-msg.waypoints[a+1].y)/2)
+			driveStraight(0.25, (msg.waypoints[a].y-msg.waypoints[a+1].y)/2)
 
 	#rotates twice and then publishes message telling map to update and find the next frontier
 	print "rotate to update gMapping"
 	print "rotate to 180"
 	rotate(180)
+	rospy.sleep(rospy.Duration(2, 0))
 	print "rotate to 0"
 	rotate(0)
+	rospy.sleep(rospy.Duration(2, 0))
 	print "rotate to -180"
 	rotate(-180)
-	print "rotate to 0"
-	rotate(0)
-	print "rotate to 180"
-	rotate(180)
+	rospy.sleep(rospy.Duration(2, 0))
 	print "need to update map"
+
+	rospy.sleep(rospy.Duration(2, 0))
 
 	sendMsg.x = xPosition
 	sendMsg.y = yPosition
 	print "newLocation {} {}".format(sendMsg.x, sendMsg.y)
 	findFront_pub.publish(sendMsg)
+	
+	rospy.sleep(rospy.Duration(3, 0))
+
+	print "rotate to 0 to force map update"
+	rotate(0)
 
 def stop_Robot(msg):
 	print "Search Complete, stopping Turtlebot"
@@ -328,12 +394,15 @@ if __name__ == '__main__':
 	goal_sub = rospy.Subscriber('move_base_simple/goal',PoseStamped, navToPose,queue_size=1)
 	stop_sub = rospy.Publisher('/STOP', Twist, stop_Robot, queue_size = 10)
 
+	sevenTwenty_sub = rospy.Subscriber('/sevenTwenty', Point, sevenTwenty)
+
 	loc_pub = rospy.Publisher('/newPoint', Point, queue_size = 1)
 	findFront_pub = rospy.Publisher('/findNextFront',Point, queue_size = 1)
+	begin_pub = rospy.Publisher('/begin', Point, queue_size = 1)
 
 	rospy.Timer(rospy.Duration(1), odomCallback)
 
-	# Use this object to get the robot's Odometry 
+	# Use this object to get the robot's Odometry
 	odom_list = tf.TransformListener()
 	odom_sub = rospy.Subscriber("/odom", Odometry, odomCallback)
 

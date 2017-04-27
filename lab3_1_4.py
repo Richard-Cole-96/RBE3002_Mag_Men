@@ -24,6 +24,9 @@ def createGrid(event, want_res):
 	global obstacle_cell_list
 	global pad_cell_list
 	global map_front_list
+	global start
+
+	#print "createGrid has map = {}".format(hasMap)
 
 	if(not hasMap):
 		hasMap = True
@@ -57,7 +60,7 @@ def createGrid(event, want_res):
 
 		rows = event.info.height 
 		cols = event.info.width
-		if(rows % res_offset == 0):
+		if((rows % res_offset == 0) and (cols % res_offset == 0)):
 			rowsStar = int(rows/res_offset)
 			colsStar = int(cols/res_offset)
 		else:
@@ -172,12 +175,11 @@ def createGrid(event, want_res):
 						gridStar[i-1][j].padding = True
 						time.sleep(.005)
 
-
 				j += 1
 			j = 0
 			i += 1
 		
-		start = gridStar[int(Xoffset / -want_res)][int(Yoffset / -want_res)]
+		start = gridStar[int((start.x - Xoffset) / cell_size)][int((start.y - Yoffset) / cell_size)]
 		print ("start(createGrid) = {},{}" .format(start.x,start.y))
 
 		z = len(map_front_list) - 1
@@ -193,7 +195,6 @@ def createGrid(event, want_res):
 		print "map loaded"
 		print "finding nearest waypoint"
 		nearest_front()
-
 
 # updates the goal cell of the TurtleBot for use in A* (does not care about orientation) (callback for /clicked_point)
 def updateGoal(msg):
@@ -245,27 +246,36 @@ def updateStart(msg):
 # (callback from /newLocation)
 def updateStart_ReMap(msg):
 	global start
-	global complete
-	global gridStar
 	global hasStart
-	global cell_size
-	global Xoffset
-	global Yoffset
+	global hasMap
 
-	start.x = msg.pose.pose.position.x
-	start.y = msg.pose.pose.position.y
-	print start.x
-	print start.y
+	start.x = msg.x
+	start.y = msg.y
 
-	start = gridStar[int((start.x - Xoffset) / cell_size)][int((start.y - Yoffset) / cell_size)]
-
-		#start = gridStar[int(Xoffset / -cell_size)][int(Yoffset / -cell_size)]
 	print ("start updated to = {},{}" .format(start.x,start.y))
 
 	hasStart = True
 	hasMap = False
+	print "updateStart_ReMap has map = {}".format(hasMap)
 
-# function that runs the A* algorithm and publishes the proper path it's waypoints
+#begins the flags to trigger a map update and updates the start position
+def beginFlags(msg):
+	global start
+	global hasStart
+	global hasMap
+
+	start = Point()
+
+	start.x = msg.x
+	start.y = msg.y
+
+	print ("start updated to = {},{}" .format(start.x,start.y))
+
+	hasStart = True
+	hasMap = False
+	print "beginFlags has map = {}".format(hasMap)
+
+# funcetion that runs the A* algorithm and publishes the proper path it's waypoints
 def AStar(initial, end):
 	global gridStar, complete
 	global start, goal
@@ -285,6 +295,7 @@ def AStar(initial, end):
 	#set the first current
 	current = initial 
 	notVisited.append(initial)
+	current.parent = None
 
 	while (notVisited and not rospy.is_shutdown()):
 
@@ -299,7 +310,7 @@ def AStar(initial, end):
 			print "Great Success!!!"
 			#reconstruct_path not written
 			complete = True
-			path.append(goal)
+			path.append(goal) #goal added to end of path?
 
 			#reset all visited attributes for next run
 			k = len(visited) - 1
@@ -315,6 +326,8 @@ def AStar(initial, end):
 				j -= 1
 
 			#create path and publish path and waypoints	
+			print "firstStep {} , {}".format(current.x, current.y)
+			#time.sleep(10)
 			reconstruct_path(current) #reconstruct_path returns an array of nodes
 			return
 
@@ -409,9 +422,6 @@ def AStar(initial, end):
 	#failed to find the goal
 	print "AStar Failed"
 	complete = True
-
-	#TODO add thing that publishes message saying A* failed
-
 	return
 
 # function that runs the A* algorithm to see if a cell can be reached
@@ -435,6 +445,7 @@ def testAStar(initial, end):
 	#set the first current
 	current = initial 
 	notVisited.append(initial)
+	current.parent = None
 
 	while (notVisited and not rospy.is_shutdown()):
 
@@ -447,7 +458,7 @@ def testAStar(initial, end):
 		#check if goal reached
 		if (current == end):
 			print "Great Success!!!"
-			#reconstruct_path not written
+			#reconstruct_path not included so no messages are published
 			complete = True
 			path.append(goal)
 
@@ -598,12 +609,27 @@ def heapPushfCost(uselist, item):
 def reconstruct_path(step):
 	global path
 
-	if(step.parent):
-		path.append(step.parent)
-		reconstruct_path(stepparent)
-	elif(not step.parent):
-		publishPath(path)
-		wayPoints(path)
+	print "reconstructing path"
+
+	current = step
+
+	path.append(current)
+	print "added {} {}".format(current.x,current.y)
+
+	hasParent = True
+
+	while(hasParent):
+		if(current.parent):
+			hasParent = True
+			path.append(current.parent)
+			print "added {} {}".format(current.parent.x,current.parent.y)
+			current = current.parent
+		elif(not current.parent):
+			hasParent = False
+			print "current has no parent"
+
+	publishPath(path)
+	wayPoints(path)
 
 # publishes and prints the path determined by A* in the order that the TurtleBot will visit them
 def publishPath(steps):
@@ -626,50 +652,49 @@ def wayPoints(steps):
 	i = len(steps) -1
 	ways.append(steps[i])
 	point = Point()
-	point.x = steps[i].x
-	point.y = steps[i].y
+	point.x = (steps[i].x * cell_size) + (cell_size/2)
+	point.y = (steps[i].y * cell_size) + (cell_size/2)
 	waypoint.append(point)
+	print "Waypoints  :  "
 	print ""
-	print "[{},{}]".format(point.x,point.y)
+	print "[{},{}]".format((steps[i].x * cell_size) + (cell_size/2),(steps[i].y * cell_size) + (cell_size/2))
 
 	#start from the end
-	while (i > 0):
+	while (i > 1):
 		if(len(steps) <= 2):
 			break
 		elif((steps[i].x == steps[i-1].x) and not (steps[i].y == steps[i-1].y)):
 			if(not (steps[i-1].x == steps[i-2].x) and (steps[i-1].y == steps[i-2].y)):
 				ways.append(steps[i-1])
 				point = Point()
-				point.x = steps[i-1].x * cell_size
-				point.y = steps[i-1].y * cell_size
+				point.x = (steps[i-1].x * cell_size) + (cell_size/2)
+				point.y = (steps[i-1].y * cell_size) + (cell_size/2)
 				waypoint.append(point)
-				print "[{},{}]".format(point.x,point.y)
+				print "[{},{}]".format((steps[i-1].x * cell_size) + (cell_size/2),(steps[i-1].y * cell_size) + (cell_size/2))
 		elif(not (steps[i].x == steps[i-1].x) and (steps[i].y == steps[i-1].y)):
 			if((steps[i-1].x == steps[i-2].x) and not (steps[i-1].y == steps[i-2].y)):
 				ways.append(steps[i-1])
 				point = Point()
-				point.x = steps[i-1].x * cell_size
-				point.y = steps[i-1].y * cell_size
+				point.x = (steps[i-1].x * cell_size) + (cell_size/2)
+				point.y = (steps[i-1].y * cell_size) + (cell_size/2)
 				waypoint.append(point)
-				print "[{},{}]".format(point.x,point.y)
+				print "[{},{}]".format((steps[i-1].x * cell_size) + (cell_size/2),(steps[i-1].y * cell_size) + (cell_size/2))
 
 		i -= 1
 	ways.append(steps[0])
 	point = Point()
-	point.x = steps[0].x * cell_size
-	point.y = steps[0].y * cell_size
+	point.x = (steps[0].x * cell_size) + (cell_size/2)
+	point.y = (steps[0].y * cell_size) + (cell_size/2)
 	waypoint.append(point)
-	print "[{},{}]".format(point.x,point.y)
-	
-	print "Waypoints  :  "
+	print "[{},{}]".format((steps[0].x * cell_size) + (cell_size/2),(steps[0].y * cell_size) + (cell_size/2))
 
 	i = len(ways) - 1
 	while (i >= 0):
 		#print "[{},{}]".format(ways[i].x,ways[i].y)
 		publishPathCell(ways[i].x, ways[i].y)
 		i -= 1
-		print ""
-
+		#print ""
+		time.sleep(.005)
 
 	msg = Waypoint()
 	msg.waypoints = waypoint
@@ -878,16 +903,19 @@ def publishBad_Map_front(x, y):
 def nearest_front():
 	global Xoffset
 	global Yoffset
-	global start
+	global start, goal
 	global cell_size
 	global map_front_list
 	global hasMap
 	global hasStart
-
+	global start
 	
+	print "nearestFront Begins"
+
 	#finds the closest frontier or if none, means we are done
-	while((not (hasMap and hasStart)):
-		print "waiting for map or start"
+	#while(not (hasMap and hasStart)):
+	#	print "waiting for map or start (in nearestfront)"
+	#	return
 
 	if (map_front_list):
 			print "finding path to closest frontier cell"
@@ -896,18 +924,18 @@ def nearest_front():
 
 			i = 1
 			while(i < len(map_front_list)):
-				cur_dist = math.sqrt((((closest.x - curX) * cell_size) ** 2) + (((closest.y - curY) * cell_size) ** 2))
-				new_dist = math.sqrt((((map_front_list[i].x - curX) * cell_size) ** 2) + (((map_front_list[i].x - curY) * cell_size) ** 2))
-				if(new_dist < cur_dist)):
+				cur_dist = math.sqrt((((closest.x - start.x) * cell_size) ** 2) + (((closest.y - start.y) * cell_size) ** 2))
+				new_dist = math.sqrt((((map_front_list[i].x - start.x) * cell_size) ** 2) + (((map_front_list[i].x - start.y) * cell_size) ** 2))
+				if(new_dist < cur_dist):
 					closest = map_front_list[i]
 				i += 1
 			goal = closest
 
-			Astar(start,goal)
-		else: #nothing in frontier so we're done!
-			print "Search complete!!!!"
-			msg = Twist()
-			stop_pub.publish(msg)
+			AStar(start, goal)
+	else: #nothing in frontier so we're done!
+		print "Search complete!!!!"
+		msg = Twist()
+		stop_pub.publish(msg)
 
 # publishes a Path Cell centered at choords (x,y)
 def publishPathCell(x, y):
@@ -965,7 +993,7 @@ if __name__ == '__main__':
 
 	rospy.init_node('Mag_Men_Astar')
 
-	global visited_pub, block_pub, frontier_pub, unknown_pub, path_pub, pad_pub, map_front_pub, bad_map_front_pub, rotation_pub
+	global visited_pub, block_pub, frontier_pub, unknown_pub, path_pub, pad_pub, map_front_pub, bad_map_front_pub, rotation_pub, sevenTwenty_pub
 	global pose 
 	global odom_tf
 	global frontier_cell_list #for storing points
@@ -1010,12 +1038,9 @@ if __name__ == '__main__':
 	cell_size = 0.05 #this is the default value for gMapping cell size
 	goal = Node(0,0,0,wanted_resolution)
 	complete = True
-	hasMap = False
-	hasGoal = False
-	#uncomment line below if want to tell start position from RVIZ
-	#hasStart = False
-	#comment line below if want to tell start position
-	hasStart = True
+	hasMap = True #should pretend it has the map until the initial rotate is complete
+	hasGoal = False #does not have goal node yet, needs either from RVIZ (A*) or generated internally (final project)
+	hasStart = False #does not have starting node yet, needs either from RVIZ (A*) or DriveTurt_4 (final project)
 	rows = 0
 	cols = 0
 	rowsStar = 0
@@ -1032,11 +1057,14 @@ if __name__ == '__main__':
 	waypoint_pub = rospy.Publisher('/waypoints', Waypoint, queue_size = 1)
 	stop_pub = rospy.Publisher('/STOP' , Twist, queue_size = 1)
 	bad_map_front_pub = rospy.Publisher('/bad_map_front', GridCells, queue_size = 20) # the frontiers that can't be reached on the map
+	sevenTwenty_pub = rospy.Publisher('/sevenTwenty', Point, queue_size = 1)
+
 
 	#initialize subscribers
 	map_sub = rospy.Subscriber('/map', OccupancyGrid, createGrid, wanted_resolution)
-	roboMap_sub = rospy.Subscriber('/move_base/global_costmap/costmap', OccupancyGrid, newCost)
+	#roboMap_sub = rospy.Subscriber('/move_base/global_costmap/costmap', OccupancyGrid, newCost)
 	goal_sub = rospy.Subscriber('/clicked_point', PointStamped, updateGoal)
+	begin_sub = rospy.Subscriber('/begin', Point, beginFlags)
 	#uncomment line below if want to tell start position from RVIZ
 	#start_sub = rospy.Subscriber('/initialpose', PoseWithCovarianceStamped, updateStart)
 	
@@ -1045,11 +1073,18 @@ if __name__ == '__main__':
 
 	#print "start {},{}".format(start.x,start.y)
 	print "Lab 3 Started"
+
+	firstMsg = Point()
+
+	sevenTwenty_pub.publish(firstMsg)
+
 	while(1 and not rospy.is_shutdown()):
 		#print "start {},{}".format(start.x,start.y)
-		while(not complete and hasStart and hasGoal):
-			print "start {},{}".format(start.x,start.y)
-			AStar(start, goal)
-		
+		#while(not complete and hasStart and hasGoal):
+			#print "start {},{}".format(start.x,start.y)
+			#AStar(start, goal)
+		pass
+		 
+# implement less then three point path catch
 
 	print "Lab 3 complete"
